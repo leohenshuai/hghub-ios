@@ -13,7 +13,7 @@ env:
 jobs:
   ios:
     name: iOS Build (IPA)
-    runs-on: macos-14
+    runs-on: macos-15
     env:
       APPLE_DEVELOPMENT_TEAM: "ABCDE12345"
     steps:
