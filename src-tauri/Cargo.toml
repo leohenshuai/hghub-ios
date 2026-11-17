@@ -46,6 +46,10 @@ objc2-app-kit = { version = "0.3", default-features = false, features = [
 ] }
 objc2-foundation = { version = "0.3", default-features = false, features = ["std", "NSGeometry"] }
 
+# iOS：关闭 WKWebView 的安全区自动内缩，让网页铺满全屏（见 src/lib.rs）。objc2 已是 wry 的间接依赖。
+[target.'cfg(target_os = "ios")'.dependencies]
+objc2 = "0.6"
+
 # Avoid invalid incremental object references on filesystems without hard links.
 [profile.dev]
 incremental = false
