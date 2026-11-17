@@ -645,3 +645,8 @@ html:not(.theme-light) .plat-ios .hg-glass-tab[data-on="1"] { color: #fff; }
 @media (prefers-reduced-motion: reduce) {
   .hg-glass-bar, .plat-ios .a-sheet, .hg-glass-pill { animation: none; transition: none; }
 }
+
+/* 悬浮玻璃栏：内容铺满到底，给底部内容让出栏的高度（栏顶 ≈ bottom + 60） */
+.plat-ios.has-tabbar { --tab-clear: calc(max(var(--sab, 0px) - 6px, 8px) + 68px); }
+.plat-ios.has-tabbar .tab-pad { padding-bottom: var(--tab-clear); box-sizing: border-box; }
+.plat-ios.has-tabbar .hg-preview-footer { padding-bottom: var(--tab-clear); }
