@@ -109,5 +109,5 @@ function AppUpdateSetting() {
 }
 
 // Reused Settings row/section structure from 5f88442.
-function Section({title,children}:{title:string;children:ReactNode}) {return <><h2 className="text-[10.5px] font-semibold text-dim tracking-wide px-1 mt-4 mb-1.5">{title}</h2><section className="rounded-(--r-md) bg-s2 divide-y divide-s3">{children}</section></>;}
+function Section({title,children}:{title:string;children:ReactNode}) {return <><h2 className="text-[10.5px] font-semibold text-dim tracking-wide px-1 mt-4 mb-1.5">{title}</h2><section className="hg-group rounded-(--r-md) bg-s2 divide-y divide-s3">{children}</section></>;}
 function Setting({icon,title,description,children}:{icon:ReactNode;title:string;description:ReactNode;children?:ReactNode}) {return <div className="flex items-center gap-3 px-3.5 py-3"><span className="shrink-0 w-8 h-8 rounded-full bg-s3 flex items-center justify-center text-primary">{icon}</span><div className="flex-1 min-w-0"><div className="text-[12.5px] text-on">{title}</div><div className="text-[10.5px] text-mut">{description}</div></div><div className="shrink-0 flex">{children}</div></div>;}
