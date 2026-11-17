@@ -43,6 +43,20 @@ pub fn run() {
             // plugin command; eager initialization would expose an incorrect env.
             #[cfg(target_os = "macos")]
             macos_titlebar::create_main_window(app)?;
+            #[cfg(target_os = "ios")]
+            if let Some(window) = app.get_webview_window("main") {
+                // WKWebView 默认按安全区自动内缩（顶 + 底），页面高度被少算、底部露出原生黑底。
+                // 改为 UIScrollViewContentInsetAdjustmentNever(=2)，安全区交给 CSS env() 处理。
+                let _ = window.with_webview(|webview| unsafe {
+                    use objc2::{msg_send, runtime::AnyObject};
+                    let wk = webview.inner() as *mut AnyObject;
+                    if wk.is_null() { return; }
+                    let scroll: *mut AnyObject = msg_send![&*wk, scrollView];
+                    if scroll.is_null() { return; }
+                    let _: () = msg_send![&*scroll, setContentInsetAdjustmentBehavior: 2isize];
+                    let _: () = msg_send![&*scroll, setBounces: false];
+                });
+            }
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
