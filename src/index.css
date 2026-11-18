@@ -787,3 +787,48 @@ html.theme-light .plat-ios .hpp-segmented button[aria-pressed=true] { background
 @media (prefers-reduced-motion: reduce) {
   .plat-ios .hg-switch .hg-switch-knob, .plat-ios .hpp-source-picker[open] { transition: none; animation: none; }
 }
+
+/* ===================================================================
+   iOS 26 · 「观看完整作品」改为 Tab Bar 上方的迷你胶囊（参照 iOS 26 Music
+   的 tab bar accessory）：单行 54px、白色圆形播放钮、进度条贴胶囊底边。
+   标题与右侧操作钮按胶囊高度重新让位，不再互相压住。
+   =================================================================== */
+.plat-ios { --tab-clear: calc(var(--sab, 0px) + 8px); --acc-h: 54px; }
+.plat-ios .hg-preview-footer {
+  left: 12px; right: 12px; inset-inline: 12px; bottom: var(--tab-clear) !important;
+  height: var(--acc-h); padding: 0 !important; border-radius: 27px; overflow: hidden;
+  display: flex; align-items: center; color: #fff;
+  background: rgba(30, 30, 34, .5);
+}
+.plat-ios.has-tabbar .hg-preview-footer { padding: 0 !important; }
+.plat-ios .hg-preview-watch {
+  position: relative; height: var(--acc-h); min-height: 0; padding: 0 16px 0 58px; gap: 8px;
+  font-size: 14.5px; font-weight: 650; letter-spacing: -.1px; border-radius: 27px;
+  transition: transform .35s var(--spring), background-color .2s;
+}
+.plat-ios .hg-preview-watch::before {
+  content: ""; position: absolute; left: 8px; top: 8px; width: 38px; height: 38px; border-radius: 50%;
+  background: #fff; box-shadow: 0 2px 8px rgba(0,0,0,.25);
+}
+.plat-ios .hg-preview-watch > svg:first-child { position: absolute; left: 19px; top: 18.5px; color: #111; z-index: 1; }
+.plat-ios .hg-preview-watch > span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.plat-ios .hg-preview-watch > svg:last-child { color: rgba(255,255,255,.55); flex: none; }
+.plat-ios .hg-preview-watch:active { transform: scale(.97); background: rgba(255,255,255,.06); }
+/* 进度：细线贴底，拖动时才显示滑块 */
+.plat-ios .hg-preview-footer input {
+  position: absolute; left: 24px; right: 24px; bottom: 0; width: auto; height: 12px; margin: 0; z-index: 2;
+}
+.plat-ios .hg-preview-footer input::-webkit-slider-runnable-track {
+  height: 2.5px; border-radius: 99px;
+  background: linear-gradient(to right, rgba(255,255,255,.9) var(--progress), rgba(255,255,255,.18) var(--progress));
+}
+.plat-ios .hg-preview-footer input::-webkit-slider-thumb {
+  width: 10px; height: 10px; margin-top: -3.75px; opacity: 0; transition: opacity .2s; box-shadow: 0 1px 4px rgba(0,0,0,.4);
+}
+.plat-ios .hg-preview-footer input:active::-webkit-slider-thumb { opacity: 1; }
+.plat-ios .hg-preview-footer input:disabled { opacity: .35; }
+/* 让位：标题区与右侧操作钮都落在胶囊之上 14px */
+.plat-ios .hg-preview-copy { bottom: calc(var(--tab-clear) + var(--acc-h) + 14px) !important; right: 84px; }
+.plat-ios .hg-preview-actions { bottom: calc(var(--tab-clear) + var(--acc-h) + 14px) !important; gap: 14px; }
+.plat-ios .hg-preview-actions button>span { width: 46px; height: 46px; }
+.plat-ios .hg-preview-actions small { font-size: 11px; }
