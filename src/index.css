@@ -778,10 +778,32 @@ html.theme-light .plat-ios .hpp-segmented button[aria-pressed=true] { background
 .plat-ios .hpp-header h1 { font-size: 28px; font-weight: 800; letter-spacing: -.5px; }
 .plat-ios .hpp-header>button { width: 42px; height: 42px; border-radius: 50%; background: var(--lg-fill);
   box-shadow: inset 0 1px 0 var(--lg-spec), inset 0 0 0 .5px var(--lg-edge); }
-/* 胶囊圆角只给「操作按钮」：卡片/海报/列表项本身也是 <button>，套 999px 会把整张卡片（含标题）裁掉 */
-.plat-ios .hpp-page button:not(.hpp-media-card):not([class*="card"]):not([class*="poster"]):not([class*="item"]) { border-radius: 999px; transition: transform .3s var(--spring), background-color .2s; }
+/* 胶囊圆角只给「单行小按钮」（白名单）。
+   不能用「全局 button + 排除法」：卡片/片库封面/换源候选/直播频道等容器型按钮里有多行内容，
+   套 999px 圆角再溢出裁切会把标题两端的字削掉（分类页、片库页都中过招）。 */
+.plat-ios .hpp-page .hpp-header-tools button,
+.plat-ios .hpp-page .hpp-form-actions button,
+.plat-ios .hpp-page .hpp-distribution-buttons button,
+.plat-ios .hpp-page .hpp-playlists button,
+.plat-ios .hpp-page .hpp-library-toolbar button,
+.plat-ios .hpp-page .hpp-library-tabs button,
+.plat-ios .hpp-page .hpp-provider-tabs button,
+.plat-ios .hpp-page .hpp-source-tabs button,
+.plat-ios .hpp-page button.primary,
+.plat-ios .hpp-page button.danger { border-radius: 999px; transition: transform .3s var(--spring), background-color .2s; }
+.plat-ios .hpp-page .hpp-header-tools button:active,
+.plat-ios .hpp-page .hpp-form-actions button:active,
+.plat-ios .hpp-page .hpp-playlists button:active,
+.plat-ios .hpp-page .hpp-library-toolbar button:active { transform: scale(.95); }
+/* 容器型按钮：圆角适中，不裁内容 */
+.plat-ios .hpp-page button.hpp-library-cover,
+.plat-ios .hpp-page button.hpp-channel,
+.plat-ios .hpp-page .hpp-source-candidates button { border-radius: 16px; overflow: visible; }
+.plat-ios .hpp-page button.hpp-article-card { border-radius: 18px; overflow: visible; }
+.plat-ios .hpp-page button.hpp-library-plugins { border-radius: 24px; overflow: visible; background: var(--lg-fill); border: 0;
+  box-shadow: inset 0 1px 0 var(--lg-spec), inset 0 0 0 .5px var(--lg-edge); }
+.plat-ios .hpp-library-cover h3 { padding-inline: 2px; }
 .plat-ios .hpp-page button.primary { border-radius: 999px; padding: 10px 18px; }
-.plat-ios .hpp-page button:not(.hpp-media-card):not([class*="card"]):not([class*="poster"]):not([class*="item"]):active { transform: scale(.95); }
 .plat-ios .hpp-page button.hpp-media-card { border-radius: 0; overflow: visible; }
 .plat-ios .hpp-page button.hpp-media-card:active { transform: scale(.97); transition: transform .3s var(--spring); }
 .plat-ios .hpp-page input:not([type=checkbox]), .plat-ios .hpp-page select { border: 0; border-radius: 14px; background: var(--lg-fill);
