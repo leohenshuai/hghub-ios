@@ -293,3 +293,18 @@ interface SubtitleTrack {
   内联样式、`iframe` 与表单；链接一律交由外部浏览器打开。
 - 正文中的图片地址由宿主改写为本地媒体协议，同样受网络规则约束。
 - 插件**应当**只返回正文片段（如 `<p>`、`<img>`），不要返回整页 HTML。
+- 图片地址按 `src`、`data-src`、`data-original`、`data-lazy-src`、`data-lazy`、`data-echo`、
+  `data-url` 的顺序取第一个可用的 http(s) 地址，因此懒加载正文无需先改成 `src`。
+- 需要请求头或字节变换的图片（加密图、防盗链图），在 `<img>` 上加一个
+  `data-hpp` 属性，值为 JSON：`{"headers":{...},"transform":{...}}`，
+  其中 `headers` 与 `transform` 的语义同图片资源对象（§7.1、§7.2）：
+
+  ```html
+  <img src="https://cdn.example/upload_01/a.jpg"
+       data-hpp='{"transform":{"type":"aes-cbc","key":"<Base64>","iv":"<Base64>"}}'>
+  ```
+
+  宿主消费该属性后不得把它渲染进 DOM；属性缺失或解析失败时按普通图片处理，
+  单个属性长度上限 2 KiB，`headers` 最多 8 项。宿主在 `hg.env.features`
+  中声明 `article.image` 表示支持此写法。
+- 正文整体（含 `data-hpp`）仍受 `contentHtml` 512 KiB 上限约束，大图不要内联成 Base64。
