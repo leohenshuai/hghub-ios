@@ -195,7 +195,7 @@
     cancel(id){const s=scopes.get(id);if(s){s.controller.abort();clean(id);}},
     pack,unpack
   };
-  function configEnv(meta,media){return {protocol:"1.0.0-dev",app:{name:"HGhub",version:"0.0.1"},plugin:{id:meta.id,version:meta.version},platform:sync("env",{}).platform,locale:"zh-CN",features:["charset.legacy"],media};}
+  function configEnv(meta,media){return {protocol:"1.0.0-dev",app:{name:"HGhub",version:"0.0.1"},plugin:{id:meta.id,version:meta.version},platform:sync("env",{}).platform,locale:"zh-CN",features:["charset.legacy","article.image"],media};}
   function structuredClone(v){return unpack(pack(v));}
   Object.assign(globalThis,{AbortSignal,AbortController,TextEncoder,TextDecoder,URL,URLSearchParams,setTimeout,clearTimeout,structuredClone,
     queueMicrotask:fn=>Promise.resolve().then(fn),

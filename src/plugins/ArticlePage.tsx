@@ -1,5 +1,5 @@
 import { createElement, useEffect, useMemo, useState, type ReactNode } from "react";
-import type { ArticleDetail, ArticleItem, Page } from "./protocol";
+import type { ArticleDetail, ArticleItem, ImageRef, Json, Page, ResourceRef, ResourceTransform } from "./protocol";
 import { openPluginLink, pluginError, type InstalledPlugin } from "./client";
 import { usePluginRequests } from "./usePluginRequests";
 import { BrowseFrame, Notice } from "./BrowsePages";
@@ -51,10 +51,59 @@ function articleUrl(raw: string | null, insecure: boolean) {
   if (!raw || /[\u0000-\u0020\u007f]/.test(raw)) return;
   try { const u = new URL(raw); if ((u.protocol === "https:" || insecure && u.protocol === "http:") && !u.username && !u.password) return u.href; } catch { /* Invalid resource stays absent. */ }
 }
+/** Lazy-loading articles keep the real picture in a data attribute; take the first usable one. */
+const imageSources = ["src", "data-src", "data-original", "data-lazy-src", "data-lazy", "data-echo", "data-url"];
+const maxDeclaredHeaders = 8, maxHeaderLength = 1024, maxDeclaredResource = 2048;
+function articleImageSource(node: Element, insecure: boolean) {
+  for (const name of imageSources) {
+    const url = articleUrl(node.getAttribute(name), insecure);
+    if (url) return url;
+  }
+}
+function articleHeaders(value: unknown) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return;
+  const out: Record<string, string> = {};
+  for (const [key, v] of Object.entries(value as Record<string, unknown>).slice(0, maxDeclaredHeaders)) {
+    if (!/^[!#$%&'*+.^_`|~0-9A-Za-z-]{1,64}$/.test(key) || typeof v !== "string" || v.length > maxHeaderLength || /[\u0000-\u001f\u007f]/.test(v)) continue;
+    out[key] = v;
+  }
+  return Object.keys(out).length ? out : undefined;
+}
+function articleTransform(value: unknown): ResourceTransform | undefined {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return;
+  const declared = value as Record<string, unknown>;
+  const text = (v: unknown, max: number) => typeof v === "string" && v.length > 0 && v.length <= max && /^[A-Za-z0-9+/=_-]+$/.test(v) ? v : undefined;
+  if (declared.type === "aes-cbc") {
+    const key = text(declared.key, 64), iv = text(declared.iv, 64);
+    if (!key || !iv) return;
+    return { type: "aes-cbc", key, iv, ...(declared.padding === "none" ? { padding: "none" as const } : {}) };
+  }
+  if (declared.type === "plugin") {
+    const name = typeof declared.name === "string" && declared.name.length > 0 && declared.name.length <= 64 ? declared.name : undefined;
+    if (!name) return;
+    return { type: "plugin", name, ...(declared.state !== undefined ? { state: declared.state as Json } : {}) };
+  }
+}
+/**
+ * An `<img>` may carry `data-hpp='{"headers":{...},"transform":{...}}'` for pictures that need
+ * request headers or byte transforms. The attribute is consumed here and never reaches the DOM.
+ */
+function articleImageRef(node: Element, url: string): ImageRef {
+  const raw = node.getAttribute("data-hpp");
+  if (!raw || raw.length > maxDeclaredResource) return url;
+  let declared: unknown;
+  try { declared = JSON.parse(raw); } catch { return url; }
+  if (!declared || typeof declared !== "object" || Array.isArray(declared)) return url;
+  const { headers, transform } = declared as { headers?: unknown; transform?: unknown };
+  const ref: ResourceRef = { url };
+  const cleanHeaders = articleHeaders(headers); if (cleanHeaders) ref.headers = cleanHeaders;
+  const cleanTransform = articleTransform(transform); if (cleanTransform) ref.transform = cleanTransform;
+  return ref.headers || ref.transform ? ref : url;
+}
 /** Parse in inert template storage. Rebuild every visible node from an allow-list. */
 export function parseArticleHtml(html: string, insecure: boolean) {
   const template = document.createElement("template"); template.innerHTML = html;
-  const images: string[] = [];
+  const images: ImageRef[] = [];
   const visit = (node: Node, depth: number): RichNode[] => {
     if (depth > 40) return [];
     if (node.nodeType === Node.TEXT_NODE) return [node.textContent || ""];
@@ -64,8 +113,8 @@ export function parseArticleHtml(html: string, insecure: boolean) {
     const children = Array.from(node.childNodes).flatMap(child => visit(child, depth + 1));
     if (!allowedTags.has(tag)) return children;
     if (tag === "img") {
-      const url = articleUrl(node.getAttribute("src"), insecure); if (!url) return [];
-      const image = images.length; images.push(url);
+      const url = articleImageSource(node, insecure); if (!url) return [];
+      const image = images.length; images.push(articleImageRef(node, url));
       return [{ tag, children: [], image, alt: (node.getAttribute("alt") || "").slice(0, 200) }];
     }
     return [{ tag, children, ...(tag === "a" ? { href: articleUrl(node.getAttribute("href"), insecure) } : {}) }];
