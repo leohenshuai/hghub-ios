@@ -194,6 +194,14 @@ pub async fn dispatch(
                 p["limit"].as_u64().unwrap_or(500) as usize,
             )
             .await?,
+        "diagnostics.report" => {
+            // 前端播放器上报（如 <video> 的 MediaError）。只接受白名单字段，文本截断。
+            let level = if p["level"].as_str() == Some("warn") { "warn" } else { "error" };
+            let plugin = p["plugin"].as_str().unwrap_or("").chars().take(80).collect::<String>();
+            let text = p["message"].as_str().unwrap_or("").chars().take(300).collect::<String>();
+            manager.diagnostics.record_event(&plugin, level, &text);
+            Value::Null
+        }
         "diagnostics.clear" => {
             manager.diagnostics.clear();
             Value::Null

@@ -653,6 +653,9 @@ async fn serve_resource(
     method: Method,
     headers: HeaderMap,
 ) -> Response<Body> {
+    let started = std::time::Instant::now();
+    let range = headers.get("range").and_then(|v| v.to_str().ok()).map(|v| v.chars().take(40).collect::<String>());
+    let mut observed: Option<String> = None;
     let result = async {
         let manager = weak.upgrade().ok_or_else(PluginError::cancelled)?;
         let session = manager
@@ -663,6 +666,7 @@ async fn serve_resource(
             .get(&id)
             .cloned()
             .ok_or_else(|| PluginError::new("NOT_FOUND", "媒体会话已释放"))?;
+        observed = session.providers.keys().next().cloned();
         if session.cancel.is_cancelled() {
             return Err(PluginError::cancelled());
         }
@@ -707,6 +711,19 @@ async fn serve_resource(
         Ok(Response::from_parts(parts, Body::from_stream(stream)))
     }
     .await;
+    // 诊断：记录「播放器请求了什么、宿主回了什么」。只记状态与类型，不记 URL、签名与请求头。
+    {
+        let ms = started.elapsed().as_millis() as u64;
+        let provider = observed.clone().unwrap_or_default();
+        let (status, ctype, clen, err) = match &result {
+            Ok(r) => (r.status().as_u16(), r.headers().get("content-type").and_then(|v| v.to_str().ok()).unwrap_or("").to_string(),
+                r.headers().get("content-length").and_then(|v| v.to_str().ok()).unwrap_or("").to_string(), None),
+            Err(e) => (0, String::new(), String::new(), Some((e.code.clone(), e.message.clone()))),
+        };
+        if let Some(diag) = crate::diagnostics::global() {
+            diag.record_media(&provider, method_name(&method), range.as_deref(), status, &ctype, &clen, ms, err.as_ref().map(|(c, m)| (c.as_str(), m.as_str())));
+        }
+    }
     cors(result.unwrap_or_else(|e| {
         Response::builder()
             .status(match e.code.as_str() {
@@ -787,6 +804,9 @@ async fn proxy_upstream(
     }
     if !buffered {
         let mut response = Response::builder().status(status);
+        // 部分对象存储对视频返回 binary/octet-stream 或 application/octet-stream。
+        // 播放器（WebKit 的 <video>）按 MIME 判断能否播放，所以按扩展名纠正为 video/*。只作用于 progressive 的视频后缀。
+        let mime = url::Url::parse(&r.url).ok().and_then(|u| video_mime(&u, upstream_headers.get("content-type").and_then(|v| v.to_str().ok())));
         for k in [
             "content-type",
             "content-length",
@@ -795,6 +815,9 @@ async fn proxy_upstream(
             "etag",
             "last-modified",
         ] {
+            if k == "content-type" {
+                if let Some(m) = mime { response = response.header(k, m); continue; }
+            }
             if let Some(v) = upstream_headers.get(k) {
                 response = response.header(k, v);
             }
@@ -1001,4 +1024,22 @@ fn rewrite_hls(
         output.push('\n');
     }
     Ok(output)
+}
+
+fn method_name(m: &Method) -> &'static str {
+    match *m { Method::HEAD => "HEAD", Method::GET => "GET", _ => "OTHER" }
+}
+
+/// 视频后缀 + 上游是通用二进制类型 → 返回 video/*；其它情况保持上游原值（None）。
+fn video_mime(target: &url::Url, upstream: Option<&str>) -> Option<&'static str> {
+    let generic = match upstream {
+        None => true,
+        Some(t) => matches!(t.split(';').next().unwrap_or("").trim().to_ascii_lowercase().as_str(), "binary/octet-stream" | "application/octet-stream" | ""),
+    };
+    if !generic { return None; }
+    let path = target.path().to_ascii_lowercase();
+    if path.ends_with(".mp4") || path.ends_with(".m4v") { Some("video/mp4") }
+    else if path.ends_with(".mov") { Some("video/quicktime") }
+    else if path.ends_with(".webm") { Some("video/webm") }
+    else { None }
 }
