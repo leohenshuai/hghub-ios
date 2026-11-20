@@ -3,7 +3,7 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        default: "0.0.2"
+        default: "0.0.4"
 permissions:
   contents: read
 env:
