@@ -87,7 +87,7 @@
 .hpp-detail-layout aside{border-left:1px solid #8882;padding-left:22px}
 .hpp-playlists{display:flex;gap:5px;flex-wrap:wrap;margin:17px 0}
 .hpp-playlists button{font-size:11px}
-.hpp-episodes{display:grid;grid-template-columns:repeat(2,1fr);gap:7px}
+.hpp-episodes{display:grid;grid-template-columns:repeat(auto-fill,minmax(56px,1fr));justify-content:start;gap:7px}
 .hpp-episodes button{font-size:11px;flex-direction:column}
 .hpp-episodes small{font-size:8px;opacity:.4}
 .hpp-resolvers{margin-top:20px;display:flex;gap:8px;align-items:center}
@@ -156,7 +156,7 @@
 .hpp-library-heading{align-items:flex-start;flex-direction:column}
 .hpp-detail-layout{grid-template-columns:1fr}
 .hpp-detail-layout aside{border:0;padding:0}
-.hpp-episodes{grid-template-columns:repeat(5,1fr)}
+
 .hpp-plugin-footer{align-items:flex-start;flex-direction:column}
 .hpp-feed-entry{grid-template-columns:1fr}.hpp-feed-stage{max-width:440px;width:100%;margin:auto}.hpp-feed-stage .hpp-player-box{max-height:70vh}.hpp-feed-meta{padding:0}
 .hpp-setting{flex-wrap:wrap}
