@@ -4,10 +4,16 @@ use crate::store::now;
 use serde_json::{json, Value};
 use std::{
     collections::{BTreeMap, VecDeque},
-    sync::Mutex,
+    sync::{Arc, Mutex, OnceLock},
 };
 
 const MAX_EVENTS: usize = 3000;
+
+static GLOBAL: OnceLock<Arc<Diagnostics>> = OnceLock::new();
+/// 进程内唯一的诊断中心：管理器与媒体代理共用，避免层层传参。
+pub fn global() -> Option<Arc<Diagnostics>> {
+    Some(GLOBAL.get_or_init(|| Arc::new(Diagnostics::default())).clone())
+}
 
 #[derive(Default, Clone)]
 struct Stat {
@@ -86,6 +92,21 @@ impl Diagnostics {
                 *s.codes.entry(code.to_string()).or_default() += 1;
                 s.last_error = Some(json!({"at": at, "code": code, "message": message.chars().take(300).collect::<String>()}));
             }
+        }
+        self.push(ev);
+    }
+
+    /// 媒体代理的一次响应（播放器的 HEAD/GET/Range 请求，以及宿主回给它的状态与类型）。
+    pub fn record_media(&self, plugin: &str, method: &str, range: Option<&str>, status: u16, ctype: &str, clen: &str, ms: u64, error: Option<(&str, &str)>) {
+        let mut ev = json!({
+            "at": now(), "kind": "media", "plugin": plugin, "method": method,
+            "status": status, "contentType": ctype.chars().take(80).collect::<String>(),
+            "contentLength": clen.chars().take(20).collect::<String>(), "ms": ms, "ok": error.is_none() && status < 400,
+        });
+        if let Some(r) = range { ev["range"] = json!(r); }
+        if let Some((code, message)) = error {
+            ev["code"] = json!(code);
+            ev["message"] = json!(message.chars().take(300).collect::<String>());
         }
         self.push(ev);
     }

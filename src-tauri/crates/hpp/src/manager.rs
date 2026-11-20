@@ -137,7 +137,7 @@ impl PluginManager {
             resolver_preferences,
             sessions: Default::default(),
             library,
-            diagnostics: Default::default(),
+            diagnostics: crate::diagnostics::global().unwrap(),
         })
     }
     pub fn with_document_reader(mut self, reader: Arc<dyn DocumentReader>) -> Self {

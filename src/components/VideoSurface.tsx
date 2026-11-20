@@ -23,6 +23,17 @@ interface Props {
 }
 
 /** Same surface/handle as the original player, loading only host-prepared media URLs. */
+
+/** 播放器错误进入诊断中心：MediaError.code 决定问题方向（2 网络/Range，3 解码，4 格式或 MIME 不被接受）。只记代码与 HTTP 状态，不记地址。 */
+const MEDIA_ERR: Record<number, string> = { 1: "ABORTED", 2: "NETWORK", 3: "DECODE", 4: "SRC_NOT_SUPPORTED" };
+function reportMediaError(v: HTMLVideoElement, media: { format?: string; providerId?: string }) {
+  const err = v.error;
+  const code = err?.code ?? 0;
+  const name = MEDIA_ERR[code] || "UNKNOWN";
+  const plugin = media.providerId || "";
+  const text = `播放器错误 MEDIA_ERR_${name}(${code})，格式 ${media.format ?? "?"}，${err?.message ? err.message.slice(0, 160) : "无详情"}`;
+  void pluginCommand("diagnostics.report", { plugin, level: "error", message: text }).catch(() => {});
+}
 export default forwardRef<VideoHandle, Props>(function VideoSurface(props, forwarded) {
   const ref=useRef<HTMLVideoElement>(null), latest=useRef(props), hls=useRef<Hls|null>(null);
   const playAttempt=useRef(0), wantsPlay=useRef(props.autoPlay!==false);
@@ -54,7 +65,7 @@ export default forwardRef<VideoHandle, Props>(function VideoSurface(props, forwa
     const started=performance.now(); let firstFrame: number | undefined;
     const p=latest.current;
     const activity=(playing:boolean)=>void pluginCommand("media.activity",{sessionId:p.media.sessionId,playing}).then(()=>{if(!playing)window.dispatchEvent(new Event("hpp.playback.idle"));}).catch(()=>{});
-    const fail=()=>{if(!disposed&&!failed){failed=true;latest.current.onError();}};
+    const fail=()=>{if(!disposed&&!failed){failed=true;reportMediaError(v,p.media);latest.current.onError();}};
     const metadata=()=>{if(p.position>0&&Number.isFinite(v.duration))v.currentTime=Math.min(p.position,Math.max(0,v.duration-.15));if(latest.current.active&&wantsPlay.current)play();};
     const playing=()=>{if(!disposed){activity(true);latest.current.onPlaying();}};
     const paused=()=>{if(!disposed&&v.paused){activity(false);latest.current.onTime(v.currentTime);if(!v.ended){if(wantsPlay.current&&latest.current.active&&v.readyState<3)latest.current.onWaiting();else latest.current.onPause();}}};
