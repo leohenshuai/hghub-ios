@@ -654,6 +654,7 @@ async fn serve_resource(
     headers: HeaderMap,
 ) -> Response<Body> {
     let started = std::time::Instant::now();
+    let method_label = method_name(&method);
     let range = headers.get("range").and_then(|v| v.to_str().ok()).map(|v| v.chars().take(40).collect::<String>());
     let mut observed: Option<String> = None;
     let result = async {
@@ -721,7 +722,7 @@ async fn serve_resource(
             Err(e) => (0, String::new(), String::new(), Some((e.code.clone(), e.message.clone()))),
         };
         if let Some(diag) = crate::diagnostics::global() {
-            diag.record_media(&provider, method_name(&method), range.as_deref(), status, &ctype, &clen, ms, err.as_ref().map(|(c, m)| (c.as_str(), m.as_str())));
+            diag.record_media(&provider, method_label, range.as_deref(), status, &ctype, &clen, ms, err.as_ref().map(|(c, m)| (c.as_str(), m.as_str())));
         }
     }
     cors(result.unwrap_or_else(|e| {
