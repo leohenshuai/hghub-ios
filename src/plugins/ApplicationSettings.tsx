@@ -58,6 +58,7 @@ export default function ApplicationSettings({ onBack }: { onBack: () => void }) 
         </div></details>
       </Section>
       <Section title="网络"><ProxySettings/><Setting icon={<ILockF size={16}/>} title="严格安全模式" description="用于插件与媒体请求。自建服务需要访问局域网时可关闭。"><Toggle label="严格安全模式" on={app.strictSecurity} disabled={!app.strictSecurityReady||app.securityPending} onChange={on=>void app.setStrictSecurity(on).catch(e=>setError(pluginError(e)))}/></Setting></Section>
+      <Section title="排查问题"><button className="w-full text-left" onClick={()=>app.push({kind:"diagnostics"})}><Setting icon={<IInfo size={16}/>} title="诊断中心" description="查看所有源的调用、失败与耗时，一键复制诊断报告"><IChevR size={16}/></Setting></button></Section>
       <Section title="关于"><Setting icon={<IInfo size={16}/>} title={`HGhub ${APP_VERSION}`} description="由用户自行导入内容源与解析器的插件视频播放器"/><AppUpdateSetting/></Section>
     </div></div>
     {picker&&<SourcePicker plugins={available} close={()=>setPicker(false)} manage={()=>app.push({kind:"plugins"})}/>}

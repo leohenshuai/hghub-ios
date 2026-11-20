@@ -187,6 +187,17 @@ pub async fn dispatch(
                 .await?
         ),
         "logs" => json!(manager.logs(text(p, "id")?).await?),
+        "diagnostics" => manager
+            .diagnostics(
+                p["id"].as_str().map(String::from),
+                p["onlyErrors"].as_bool().unwrap_or(false),
+                p["limit"].as_u64().unwrap_or(500) as usize,
+            )
+            .await?,
+        "diagnostics.clear" => {
+            manager.diagnostics.clear();
+            Value::Null
+        }
         "form.actions" => {
             let method = match text(p, "target")? {
                 "auth" => "auth.getMethods",
