@@ -817,8 +817,8 @@ impl PluginManager {
                 "error": p.error.as_ref().map(|e| json!({"code": e.code, "message": e.message})),
                 "fault": fault.map(|e| e.message),
             }));
-            for l in p.logs.lock().unwrap().iter() {
-                if matches!(l["level"].as_str(), Some("error")) && l["requestId"].is_null() {
+            for l in p.logs.lock().unwrap().snapshot().iter() {
+                if matches!(l["level"].as_str(), Some("error")) && l["requestId"].as_str().map_or(true, str::is_empty) {
                     runtime_events.push(json!({"at": l["at"], "kind": "event", "plugin": id, "level": "error", "message": l["text"]}));
                 }
             }
