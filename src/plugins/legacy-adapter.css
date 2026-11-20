@@ -13,7 +13,7 @@
 .legacy-panel-body h3{font-size:12px;color:var(--p-mut);margin:18px 0 10px}
 .legacy-panel-body button{cursor:pointer;border-radius:4px;padding:7px 10px;background:var(--p-s3);font-size:12px}
 .legacy-panel-body button:disabled{opacity:.4}
-.legacy-panel-body .hpp-episodes{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;margin:12px 0}
+.legacy-panel-body .hpp-episodes{display:grid;grid-template-columns:repeat(auto-fill,minmax(56px,1fr));justify-content:start;gap:8px;margin:12px 0}
 .legacy-panel-body .hpp-episodes button{min-height:40px;padding:6px 3px}
 .legacy-panel-body button.selected{background:var(--p-primary);color:var(--p-on-primary)}
 .legacy-panel-body .hpp-playlists{display:flex;flex-wrap:wrap;gap:6px}
