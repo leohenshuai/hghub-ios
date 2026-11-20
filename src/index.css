@@ -754,6 +754,9 @@ html.theme-light .plat-ios .hpp-segmented button[aria-pressed=true] { background
 .plat-ios .hg-group { border-radius: 22px; background: var(--lg-fill); overflow: hidden;
   box-shadow: inset 0 1px 0 var(--lg-spec), inset 0 0 0 .5px var(--lg-edge); }
 .plat-ios .hg-group > * + * { border-top: .5px solid rgba(128,128,128,.22); }
+/* 上游 0.0.4 的 refined-settings-group>section 后加载、同等特异性，会盖掉 iOS 玻璃分组：在设置页里提高 iOS 规则优先级 */
+.plat-ios .refined-settings-group > section.hg-group { border-radius: 22px; background: var(--lg-fill); border: 0; padding: 0; overflow: hidden;
+  box-shadow: inset 0 1px 0 var(--lg-spec), inset 0 0 0 .5px var(--lg-edge); }
 .plat-ios .legacy-settings h2 { text-transform: none; letter-spacing: 0; }
 
 /* —— 开关：iOS 26 样式（绿底 + 玻璃滑块） —— */
