@@ -26,12 +26,13 @@ interface Props {
 
 /** 播放器错误进入诊断中心：MediaError.code 决定问题方向（2 网络/Range，3 解码，4 格式或 MIME 不被接受）。只记代码与 HTTP 状态，不记地址。 */
 const MEDIA_ERR: Record<number, string> = { 1: "ABORTED", 2: "NETWORK", 3: "DECODE", 4: "SRC_NOT_SUPPORTED" };
-function reportMediaError(v: HTMLVideoElement, media: { format?: string; providerId?: string }) {
+function reportMediaError(v: HTMLVideoElement, media: { format?: string; providerId?: string; diag?: { mediaId: string; episodeId: string; title?: string } }) {
   const err = v.error;
   const code = err?.code ?? 0;
   const name = MEDIA_ERR[code] || "UNKNOWN";
   const plugin = media.providerId || "";
-  const text = `播放器错误 MEDIA_ERR_${name}(${code})，格式 ${media.format ?? "?"}，${err?.message ? err.message.slice(0, 160) : "无详情"}`;
+  const where = media.diag ? `「${media.diag.title || media.diag.mediaId}」mediaId=${media.diag.mediaId} ep=${media.diag.episodeId}，` : "";
+  const text = `播放器错误 MEDIA_ERR_${name}(${code})，${where}格式 ${media.format ?? "?"}，${err?.message ? err.message.slice(0, 160) : "无详情"}`;
   void pluginCommand("diagnostics.report", { plugin, level: "error", message: text }).catch(() => {});
 }
 export default forwardRef<VideoHandle, Props>(function VideoSurface(props, forwarded) {

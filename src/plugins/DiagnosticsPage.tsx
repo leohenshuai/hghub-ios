@@ -5,7 +5,7 @@ import { usePluginRequests } from "./usePluginRequests";
 
 type Ev = { at: number; kind: "call" | "event"; plugin: string; name?: string; version?: string; method?: string; ms?: number; ok?: boolean; code?: string; message?: string; level?: string; params?: Record<string, unknown>; warnings?: number };
 type MethodStat = { method: string; calls: number; errors: number; avgMs: number; maxMs: number };
-type Sum = { plugin: string; name: string; version?: string; calls: number; errors: number; faults: number; avgMs: number; maxMs: number; lastAt: number; codes: Record<string, number>; lastError?: { at: number; code: string; message: string; method: string }; methods: MethodStat[] };
+type Sum = { plugin: string; name: string; version?: string; calls: number; errors: number; faults: number; playFailures?: number; plays?: number; avgMs: number; maxMs: number; lastAt: number; codes: Record<string, number>; lastError?: { at: number; code: string; message: string; method: string }; methods: MethodStat[] };
 type State = { plugin: string; name: string; version: string; enabled: boolean; running: boolean; error?: { code: string; message: string } | null; fault?: string | null };
 type Report = { at: number; plugins: State[]; summary: Sum[]; events: Ev[] };
 
@@ -13,8 +13,12 @@ const time = (t: number) => new Date(t).toLocaleTimeString("zh-CN", { hour12: fa
 const health = (s?: Sum, st?: State) => {
   if (st?.fault || st?.error) return { tone: "bad", text: st.fault ? "已停用（运行时故障）" : "加载失败" };
   if (!s || !s.calls) return { tone: "idle", text: "暂无调用" };
+  // 插件返回成功不等于能播：播放器报错（MEDIA_ERR）也计入，并单独标出
+  const pf = s.playFailures || 0, plays = s.plays || 0;
+  if (pf && plays && pf / plays >= 0.5) return { tone: "bad", text: `播放失败 ${pf}/${plays}` };
   const r = s.errors / s.calls;
   if (r >= 0.5) return { tone: "bad", text: `失败率 ${Math.round(r * 100)}%` };
+  if (pf) return { tone: "warn", text: `播放失败 ${pf}${plays ? "/" + plays : ""} 次` };
   if (r > 0 || s.maxMs > 20000) return { tone: "warn", text: r > 0 ? `失败 ${s.errors}/${s.calls}` : "响应偏慢" };
   return { tone: "ok", text: "正常" };
 };
@@ -53,7 +57,7 @@ export default function DiagnosticsPage({ onBack }: { onBack: () => void }) {
       if (st.fault) lines.push(`运行时：${st.fault}`);
       if (st.error) lines.push(`加载：${st.error.code} ${st.error.message}`);
       if (s) {
-        lines.push(`调用 ${s.calls} 次，失败 ${s.errors}，平均 ${s.avgMs}ms，最长 ${s.maxMs}ms` + (Object.keys(s.codes).length ? `，错误码 ${Object.entries(s.codes).map(([c, n]) => `${c}×${n}`).join(" ")}` : ""));
+        lines.push(`调用 ${s.calls} 次，失败 ${s.errors}，播放器失败 ${s.playFailures || 0}，平均 ${s.avgMs}ms，最长 ${s.maxMs}ms` + (Object.keys(s.codes).length ? `，错误码 ${Object.entries(s.codes).map(([c, n]) => `${c}×${n}`).join(" ")}` : ""));
         for (const m of s.methods) lines.push(`  ${m.method}: ${m.calls} 次 / 失败 ${m.errors} / 平均 ${m.avgMs}ms / 最长 ${m.maxMs}ms`);
       }
       const ev = report.events.filter(e => e.plugin === st.plugin && (e.ok === false || e.level)).slice(0, 15);

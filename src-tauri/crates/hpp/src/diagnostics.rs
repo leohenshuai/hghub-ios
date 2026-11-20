@@ -158,13 +158,18 @@ impl Diagnostics {
                 .filter_map(|(m, s)| s.last_error.clone().map(|mut e| { e["method"] = json!(m); e }))
                 .max_by_key(|e| e["at"].as_u64().unwrap_or(0));
             let faults = events.iter().filter(|e| e["plugin"] == plugin.as_str() && e["kind"] == "event" && e["level"] == "error").count();
+            // 播放器真正播不出来的次数（插件解析成功不代表能播）：前端上报的 MEDIA_ERR 与媒体代理失败
+            let play_failures = events.iter().filter(|e| e["plugin"] == plugin.as_str() && (
+                (e["kind"] == "event" && e["message"].as_str().is_some_and(|m| m.starts_with("播放器错误")))
+                || (e["kind"] == "media" && e["ok"] == false))).count();
+            let plays: u64 = methods.iter().filter(|(m, _)| matches!(m.as_str(), "media.resolvePlayback" | "live.resolve" | "resolver.resolve" | "article.prepare")).map(|(_, s)| s.calls).sum();
             let name = events.iter().rev().find(|e| e["plugin"] == plugin.as_str() && e["name"].is_string())
                 .map(|e| e["name"].clone()).unwrap_or(json!(plugin));
             let version = events.iter().rev().find(|e| e["plugin"] == plugin.as_str() && e["version"].is_string())
                 .map(|e| e["version"].clone()).unwrap_or(Value::Null);
             out.push(json!({
                 "plugin": plugin, "name": name, "version": version,
-                "calls": calls, "errors": errors, "faults": faults,
+                "calls": calls, "errors": errors, "faults": faults, "playFailures": play_failures, "plays": plays,
                 "avgMs": if calls > 0 { total / calls } else { 0 }, "maxMs": max_ms, "lastAt": last_at,
                 "codes": codes, "lastError": last_error,
                 "methods": methods.iter().map(|(m, s)| json!({

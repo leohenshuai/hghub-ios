@@ -185,6 +185,7 @@ export default function PluginMediaDetail({ plugin, mediaId, onBack, manage, act
       }
       selection.current = rememberPlaybackSelection(r, chosen);
       r.requestedAt = started;
+      r.diag = { mediaId, episodeId: ep.id, title: [detail?.title, ep.label || ep.title].filter(Boolean).join(' · ').slice(0, 80) };
       session.current = r; setMedia(r); setChoices(r.choices);
       bufferAhead.current = 0; durationRef.current = 0; playing.current = false;
       if (previousSession && previousSession.sessionId !== r.sessionId) releaseMedia(previousSession.sessionId);

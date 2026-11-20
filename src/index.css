@@ -760,16 +760,39 @@ html.theme-light .plat-ios .hpp-segmented button[aria-pressed=true] { background
 .plat-ios .legacy-settings h2 { text-transform: none; letter-spacing: 0; }
 
 /* —— 开关：iOS 26 样式（绿底 + 玻璃滑块） —— */
-.plat-ios .hg-switch { width: 52px; height: 32px; background: rgba(120,120,128,.32); transition: background-color .3s; }
+.plat-ios .hg-switch { width: 51px; height: 31px; background: rgba(120,120,128,.32); transition: background-color .3s; }
 .plat-ios .hg-switch[aria-pressed=true] { background: #34c759; }
+/* iOS 标准开关：静止时是 27×27 的圆形滑块；只有按住时才横向拉长，松开恢复圆形 */
 .plat-ios .hg-switch .hg-switch-knob {
-  top: 2px; width: 36px; height: 28px; border-radius: 14px; background: #fff !important; left: 2px !important;
-  box-shadow: 0 2px 6px rgba(0,0,0,.28), inset 0 0 0 .5px rgba(0,0,0,.06);
-  transition: transform .4s var(--spring), width .2s;
+  top: 2px; width: 27px; height: 27px; border-radius: 999px; background: #fff !important; left: 2px !important;
+  box-shadow: 0 3px 8px rgba(0,0,0,.15), 0 3px 1px rgba(0,0,0,.06), 0 0 0 .5px rgba(0,0,0,.04);
+  transition: transform .35s var(--spring), width .2s;
 }
-.plat-ios .hg-switch[aria-pressed=true] .hg-switch-knob { transform: translateX(14px); }
-.plat-ios .hg-switch:active .hg-switch-knob { width: 42px; }
-.plat-ios .hg-switch[aria-pressed=true]:active .hg-switch-knob { transform: translateX(8px); }
+.plat-ios .hg-switch[aria-pressed=true] .hg-switch-knob { transform: translateX(20px); }
+.plat-ios .hg-switch:active .hg-switch-knob { width: 33px; }
+.plat-ios .hg-switch[aria-pressed=true]:active .hg-switch-knob { transform: translateX(14px); }
+/* 上游 0.0.4 的 .refined-settings-group section .rounded-full{border-radius:8px} 会把开关轨道和滑块变成圆角矩形：iOS 下恢复胶囊形，并保证不被行内容挤压 */
+.plat-ios .refined-settings-group section .hg-switch { border-radius: 999px; flex-shrink: 0; }
+.plat-ios .refined-settings-group section .hg-switch .hg-switch-knob { border-radius: 999px; }
+/* 片源页的启用开关（上游新加的方形开关）：iOS 下改成标准胶囊开关 */
+.plat-ios .hpp-plugins-page .plugin-enable-switch { width: 51px; height: 31px; min-height: 31px; border-radius: 999px; background: rgba(120,120,128,.32); margin-right: 10px; transition: background-color .3s; }
+.plat-ios .hpp-plugins-page .plugin-enable-switch[aria-checked=true] { background: #34c759; }
+.plat-ios .hpp-plugins-page .plugin-enable-switch span { left: 2px; top: 2px; width: 27px; height: 27px; border-radius: 999px; background: #fff;
+  box-shadow: 0 2px 6px rgba(0,0,0,.28), inset 0 0 0 .5px rgba(0,0,0,.06); transition: transform .4s var(--spring); }
+.plat-ios .hpp-plugins-page .plugin-enable-switch[aria-checked=true] span { transform: translateX(20px); background: #fff; }
+/* 上游 0.0.4 的 refined-pages.css 后加载、特异性相同，会盖掉下面两处 iOS 样式：搜索结果标签、片源卡片。提高一级恢复 */
+.plat-ios .refined-search .legacy-search-tabs button { border-radius: 999px; }
+.plat-ios .refined-page .hpp-plugin { border-radius: 24px; border: 0; background: var(--lg-fill);
+  box-shadow: inset 0 1px 0 var(--lg-spec), inset 0 0 0 .5px var(--lg-edge), 0 6px 22px rgba(0,0,0,.14); }
+/* 片源列表里的卡片是一行行紧凑列表（上游新布局），大圆角+阴影会显得臃肿：列表行用中等圆角、无投影 */
+.plat-ios .hpp-plugins-page .refined-plugin-list .hpp-plugin { border-radius: 16px; box-shadow: inset 0 0 0 .5px var(--lg-edge); }
+/* 上游 0.0.4 片库分段标签是 2px 方角、搜索框是 12px 圆角：iOS 下改成系统分段控件与胶囊搜索框 */
+.plat-ios .hpp-library-page .library-control-bar .hpp-library-tabs { border-radius: 999px; padding: 3px; background: rgba(120,120,128,.24); }
+.plat-ios .hpp-library-page .library-control-bar .hpp-library-tabs button { border-radius: 999px; height: 30px; }
+.plat-ios .hpp-library-page .library-control-bar .hpp-library-tabs button[aria-pressed=true] { background: var(--lg-fill); box-shadow: 0 2px 6px rgba(0,0,0,.18); }
+.plat-ios .refined-search .legacy-search-form, .plat-ios .refined-mobile.refined-search .legacy-search-form { border-radius: 999px; }
+/* 片源页的分类筛选（全部/影视/成人…）与设置/片库其它胶囊保持一致 */
+.plat-ios .hpp-plugins-page .plugin-kind-tabs button { border-radius: 999px; padding: 6px 12px; }
 
 /* —— 对话框 / 提示：玻璃 —— */
 .plat-ios .hpp-source-picker { border: 0; border-radius: 32px; background: var(--lg-fill-strong);

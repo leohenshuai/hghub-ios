@@ -11,6 +11,8 @@ export interface PreparedMedia {
   version: number;
   requestedAt?: number;
   sessionId: string; url: string; format: "hls" | "progressive"; providerId: string;
+  /** 仅前端诊断用：播放失败时把作品/分集带进诊断中心 */
+  diag?: { mediaId: string; episodeId: string; title?: string };
   playback: Omit<PlaybackInfo, "streams">;
   choices: { source: PlaybackChoices; resolver?: PlaybackChoices; resolverRoute?: ResolverRoute; external?: ExternalMedia };
 }
