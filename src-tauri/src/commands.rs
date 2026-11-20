@@ -39,3 +39,9 @@ pub fn open_url(app: tauri::AppHandle, url: String) -> Result<(), String> {
         .open_url(target.as_str(), None::<&str>)
         .map_err(|e| e.to_string())
 }
+
+#[tauri::command]
+pub fn open_external_media(app: tauri::AppHandle, url: String) -> Result<(), String> {
+    hghub_hpp::model::url(&url, true, true).map_err(|e| e.message)?;
+    app.opener().open_url(url, None::<&str>).map_err(|e| e.to_string())
+}

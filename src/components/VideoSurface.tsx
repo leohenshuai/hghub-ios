@@ -64,7 +64,7 @@ export default forwardRef<VideoHandle, Props>(function VideoSurface(props, forwa
     playAttempt.current++;wantsPlay.current=latest.current.autoPlay!==false;
     const started=performance.now(); let firstFrame: number | undefined;
     const p=latest.current;
-    const activity=(playing:boolean)=>void pluginCommand("media.activity",{sessionId:p.media.sessionId,playing}).then(()=>{if(!playing)window.dispatchEvent(new Event("hpp.playback.idle"));}).catch(()=>{});
+    const activity=(playing:boolean)=>void pluginCommand("media.activity",{sessionId:p.media.sessionId,version:p.media.version,playing}).then(()=>{if(!playing)window.dispatchEvent(new Event("hpp.playback.idle"));}).catch(()=>{});
     const fail=()=>{if(!disposed&&!failed){failed=true;reportMediaError(v,p.media);latest.current.onError();}};
     const metadata=()=>{if(p.position>0&&Number.isFinite(v.duration))v.currentTime=Math.min(p.position,Math.max(0,v.duration-.15));if(latest.current.active&&wantsPlay.current)play();};
     const playing=()=>{if(!disposed){activity(true);latest.current.onPlaying();}};
@@ -82,9 +82,9 @@ export default forwardRef<VideoHandle, Props>(function VideoSurface(props, forwa
     const expiry=p.media.playback.expiresAt;
     const timer=expiry?window.setTimeout(fail,Math.max(1000,Math.min(2_147_483_647,expiry-Date.now()-5000))):undefined;
     return()=>{disposed=true;playAttempt.current++;if(firstFrame!==undefined)v.cancelVideoFrameCallback(firstFrame);clearTimeout(timer);activity(false);document.removeEventListener("visibilitychange",visibility);v.removeEventListener("loadedmetadata",metadata);v.removeEventListener("error",fail);v.removeEventListener("playing",playing);v.removeEventListener("pause",paused);hls.current?.destroy();hls.current=null;v.pause();v.removeAttribute("src");v.load();};
-  },[props.media.sessionId]);
+  },[props.media.sessionId,props.media.version]);
   useEffect(()=>{const v=ref.current;if(v){v.muted=props.muted;v.volume=props.volume;v.playbackRate=props.rate;}},[props.muted,props.volume,props.rate]);
-  useEffect(()=>{if(!props.active||document.hidden){ref.current?.pause();hls.current?.stopLoad();}else if(hls.current)hls.current.startLoad(ref.current?.currentTime||props.position);},[props.active,props.media.sessionId]);
+  useEffect(()=>{if(!props.active||document.hidden){ref.current?.pause();hls.current?.stopLoad();}else if(hls.current)hls.current.startLoad(ref.current?.currentTime||props.position);},[props.active,props.media.sessionId,props.media.version]);
   const dimensions=()=>{const v=ref.current!;if(Number.isFinite(v.duration))latest.current.onDuration(v.duration);if(v.videoWidth)latest.current.onSize(v.videoWidth,v.videoHeight);};
   const buffered=(v:HTMLVideoElement)=>{props.onBuffered(v.duration&&v.buffered.length?v.buffered.end(v.buffered.length-1)/v.duration:0);let ahead=0;for(let i=0;i<v.buffered.length;i++)if(v.buffered.start(i)<=v.currentTime+.1&&v.buffered.end(i)>v.currentTime)ahead=v.buffered.end(i)-v.currentTime;props.onBuffer?.(ahead);};
   return <div className="absolute inset-0 overflow-hidden" onClick={props.onClick}>

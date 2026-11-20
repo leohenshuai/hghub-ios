@@ -90,7 +90,7 @@ async fn media_snapshot_registration_reload_and_all_playback_calls_agree() {
             );
             assert!(manager
                 .sessions
-                .activity(result["sessionId"].as_str().unwrap(), true)
+                .activity(result["sessionId"].as_str().unwrap(), true, None)
                 .is_ok());
             assert_eq!(manager.list().await[0].revision, revision);
             manager
@@ -122,7 +122,7 @@ async fn media_snapshot_registration_reload_and_all_playback_calls_agree() {
     );
     assert!(manager
         .sessions
-        .activity(&prepared.session_id, true)
+        .activity(&prepared.session_id, true, None)
         .is_err());
     assert_eq!(
         read(&manager, "env").await,

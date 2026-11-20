@@ -7,7 +7,7 @@ import { useEffect, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { checkAppUpdate, type AppRelease } from "../appUpdates";
 import { useStore } from "../store";
-import { APP_VERSION } from "../environment";
+import { APP_VERSION, isMobile } from "../environment";
 import { useHost } from "./HostContext";
 import { BrowseFrame, Notice } from "./BrowsePages";
 import { pluginError } from "./client";
@@ -31,14 +31,14 @@ export default function ApplicationSettings({ onBack }: { onBack: () => void }) 
     try { await request("updates.policy.set", { ...host.updates.policy, ...changes }); await host.refreshUpdates(); }
     catch (e) { setError(pluginError(e)); } finally { setClearing(false); }
   };
-  return <div className="absolute inset-0 bg-bg flex flex-col legacy-settings">
+  return <div className={"absolute inset-0 bg-bg flex flex-col legacy-settings refined-page"+(isMobile?" refined-mobile":"")}>
     <div className="shrink-0 relative overflow-hidden bg-s1" style={{paddingTop:"var(--sat, 0px)"}}>
       <div className="absolute inset-0 pointer-events-none" style={{background:"radial-gradient(90% 120% at 100% 0%, var(--p-pc) 0%, transparent 60%)",opacity:.32}}/>
       <div className="relative px-3 pt-2 pb-4"><button onClick={onBack} aria-label="返回" className="w-10 h-10 rounded-full flex items-center justify-center text-on hover:bg-s3 pressable"><IBack size={20}/></button>
         <div className="px-2 mt-1"><div className="flex items-center gap-2"><span className="w-9 h-9 rounded-(--r-sm) bg-pc text-on-pc flex items-center justify-center"><ISettings size={20}/></span><h1 className="text-[24px] font-bold tracking-wide text-on">设置</h1></div><p className="text-[11px] text-mut mt-1">外观 · 播放 · 插件 · 本地数据</p></div>
       </div>
     </div>
-    <div className="flex-1 min-h-0 scroll-y px-4 pt-1 pb-10"><div className="max-w-[720px] mx-auto"><Notice error={error||app.error}/>
+    <div className="flex-1 min-h-0 scroll-y px-4 pt-1 pb-10"><div className="refined-settings-grid"><Notice error={error||app.error}/><div className="refined-settings-column">
       <Section title="外观"><Setting icon={app.theme==="dark"?<IMoon size={16}/>:<ISun size={16}/>} title="深色外观" description="切换应用的深色与浅色外观"><Toggle label="深色外观" on={app.theme==="dark"} onChange={on=>app.setTheme(on?"dark":"light")}/></Setting></Section>
       <Section title="播放">
         <button className="w-full text-left" onClick={()=>setPicker(true)} aria-haspopup="dialog"><Setting icon={<IGrid size={16}/>} title="首页播放片源" description={host.prefs.homeMode==="all"?`全部片源 · ${available.length} 个`:host.prefs.homeMode==="single"?selected[0]?.meta.name||"尚未选择片源":`已选择 ${selected.length} 个片源`}><IChevR size={15}/></Setting></button>
@@ -51,7 +51,7 @@ export default function ApplicationSettings({ onBack }: { onBack: () => void }) 
         <Setting icon={<IGrid size={16}/>} title="自动安装插件更新" description="在当前播放结束后安装更高版本"><Toggle label="自动安装插件更新" on={host.updates.policy.autoInstall} disabled={clearing} onChange={autoInstall=>void updatePolicy({autoInstall})}/></Setting>
         <Setting icon={<ILockF size={16}/>} title="显示成人内容" description="控制来源中的成人内容展示"><Toggle label="显示成人内容" on={host.prefs.mature} onChange={mature=>host.setPrefs({mature})}/></Setting>
       </Section>
-      <Section title="本地数据"><Setting icon={<IHeart size={16}/>} title="我的片库" description={`${host.library.filter(e=>e.favorite).length} 部收藏 · ${host.library.filter(e=>e.lastProgress).length} 条观看记录`}/>
+      </div><div className="refined-settings-column"><Section title="本地数据"><Setting icon={<IHeart size={16}/>} title="我的片库" description={`${host.library.filter(e=>e.favorite).length} 部收藏 · ${host.library.filter(e=>e.lastProgress).length} 条观看记录`}/>
         <details className="px-3.5 py-3 hpp-resolver-preferences" aria-label="解析器站点偏好"><summary className="text-[12.5px] cursor-pointer">解析器站点偏好</summary><div className="mt-3 text-xs text-mut">
           {Object.entries(resolverPrefs).map(([site,id])=><div className="flex gap-2 py-2" key={site}><span className="flex-1 break-all">{site} · {host.plugins.find(p=>p.meta.id===id)?.meta.name||id}</span><button aria-label={`忘记 ${site} 的解析器`} disabled={clearing} onClick={()=>void clearResolver(site)}>忘记</button></div>)}
           {!Object.keys(resolverPrefs).length&&<p>暂无记住的站点。</p>}<button className="mt-3 text-primary" disabled={clearing||!Object.keys(resolverPrefs).length} onClick={()=>void clearResolver()}>清空解析器偏好</button>
@@ -60,7 +60,7 @@ export default function ApplicationSettings({ onBack }: { onBack: () => void }) 
       <Section title="网络"><ProxySettings/><Setting icon={<ILockF size={16}/>} title="严格安全模式" description="用于插件与媒体请求。自建服务需要访问局域网时可关闭。"><Toggle label="严格安全模式" on={app.strictSecurity} disabled={!app.strictSecurityReady||app.securityPending} onChange={on=>void app.setStrictSecurity(on).catch(e=>setError(pluginError(e)))}/></Setting></Section>
       <Section title="排查问题"><button className="w-full text-left" onClick={()=>app.push({kind:"diagnostics"})}><Setting icon={<IInfo size={16}/>} title="诊断中心" description="查看所有源的调用、失败与耗时，一键复制诊断报告"><IChevR size={16}/></Setting></button></Section>
       <Section title="关于"><Setting icon={<IInfo size={16}/>} title={`HGhub ${APP_VERSION}`} description="由用户自行导入内容源与解析器的插件视频播放器"/><AppUpdateSetting/></Section>
-    </div></div>
+    </div></div></div>
     {picker&&<SourcePicker plugins={available} close={()=>setPicker(false)} manage={()=>app.push({kind:"plugins"})}/>}
   </div>;
 }
@@ -110,5 +110,5 @@ function AppUpdateSetting() {
 }
 
 // Reused Settings row/section structure from 5f88442.
-function Section({title,children}:{title:string;children:ReactNode}) {return <><h2 className="text-[10.5px] font-semibold text-dim tracking-wide px-1 mt-4 mb-1.5">{title}</h2><section className="hg-group rounded-(--r-md) bg-s2 divide-y divide-s3">{children}</section></>;}
+function Section({title,children}:{title:string;children:ReactNode}) {return <div className="refined-settings-group"><h2 className="text-[10.5px] font-semibold text-dim tracking-wide px-1 mt-4 mb-1.5">{title}</h2><section className="hg-group rounded-(--r-md) bg-s2 divide-y divide-s3">{children}</section></div>;}
 function Setting({icon,title,description,children}:{icon:ReactNode;title:string;description:ReactNode;children?:ReactNode}) {return <div className="flex items-center gap-3 px-3.5 py-3"><span className="shrink-0 w-8 h-8 rounded-full bg-s3 flex items-center justify-center text-primary">{icon}</span><div className="flex-1 min-w-0"><div className="text-[12.5px] text-on">{title}</div><div className="text-[10.5px] text-mut">{description}</div></div><div className="shrink-0 flex">{children}</div></div>;}

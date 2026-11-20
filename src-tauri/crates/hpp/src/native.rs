@@ -1,39 +1,13 @@
-use crate::{store::now, wire::Transfer, PluginError, Result};
+use crate::{wire::Transfer, PluginError, Result};
 use aes::cipher::{BlockDecrypt, BlockEncrypt, KeyInit, KeyIvInit, StreamCipher};
 use base64::Engine;
 use rsa::{pkcs1::DecodeRsaPublicKey, pkcs8::DecodePublicKey, PublicKey};
 use serde_json::{json, Value};
 use sha2::Digest;
-use std::{
-    collections::{HashMap, VecDeque},
-    sync::{Arc, Mutex},
-};
-
-pub type Logs = Arc<Mutex<VecDeque<Value>>>;
-fn bounded_log(text: &str) -> &str {
-    let mut end = text.len().min(2048);
-    while !text.is_char_boundary(end) {
-        end -= 1;
-    }
-    &text[..end]
-}
-pub(crate) fn validation_log(logs: &Logs, level: &str, text: &str, request_id: &str) {
-    let mut logs = logs.lock().unwrap();
-    let at = now();
-    if logs
-        .iter()
-        .rev()
-        .take_while(|l| l["at"].as_u64().unwrap_or(0) + 60000 > at)
-        .count()
-        >= 240
-    {
-        return;
-    }
-    logs.push_back(json!({"at":at,"level":level,"text":text.chars().take(512).collect::<String>(),"requestId":request_id}));
-    while logs.len() > 2000 {
-        logs.pop_front();
-    }
-}
+use std::collections::HashMap;
+mod logs;
+pub(crate) use logs::validation_log;
+pub use logs::Logs;
 pub struct Native {
     pub logs: Logs,
     docs: HashMap<u64, (String, dom_query::Document)>,
@@ -70,18 +44,7 @@ impl Native {
                 json!({"platform":if cfg!(target_os="windows"){"windows"}else if cfg!(target_os="macos"){"macos"}else if cfg!(target_os="android"){"android"}else if cfg!(target_os="ios"){"ios"}else{"linux"}})
             }
             "log" => {
-                let mut logs = self.logs.lock().unwrap();
-                let count = logs
-                    .iter()
-                    .rev()
-                    .take_while(|l| l["at"].as_u64().unwrap_or(0) + 60000 > now())
-                    .count();
-                if count < 240 {
-                    logs.push_back(json!({"at":now(),"level":v["level"],"text":bounded_log(v["text"].as_str().unwrap_or("")),"requestId":scope}));
-                    while logs.len() > 2000 {
-                        logs.pop_front();
-                    }
-                }
+                self.logs.lock().unwrap().push(v["level"].as_str().unwrap(), v["text"].as_str().unwrap(), scope, None);
                 Value::Null
             }
             "codec.utf8Encode" => return Ok(Transfer::Bytes(string("text")?.into_bytes())),

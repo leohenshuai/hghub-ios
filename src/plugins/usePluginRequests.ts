@@ -23,7 +23,7 @@ export function usePluginRequests() {
     try {
       const result = await pluginCommand<T>(action, { ...params, requestId });
       if (!mounted.current) {
-        if (result && typeof result === "object" && "sessionId" in result) releaseMedia(String(result.sessionId));
+        if (action !== 'media.refresh' && result && typeof result === "object" && "sessionId" in result) releaseMedia(String(result.sessionId));
         const preview = action === "distribution.preview" ? result : action === "updates.check" ? (result as { preview?: unknown })?.preview : null;
         if (preview && typeof preview === "object" && "token" in preview) {
           void pluginCommand("distribution.discard", { token: String(preview.token) }).catch(() => {});

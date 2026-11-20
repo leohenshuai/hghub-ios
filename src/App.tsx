@@ -21,6 +21,7 @@ import "./plugins/plugins.css";
 import "./plugins/shell.css";
 import "./plugins/legacy-adapter.css";
 import "./plugins/watch-experience.css";
+import "./plugins/refined-pages.css";
 import ImmersiveHome from "./plugins/ImmersiveHome";
 import { runBack } from "./back";
 import { addPluginListener, invoke } from "@tauri-apps/api/core";

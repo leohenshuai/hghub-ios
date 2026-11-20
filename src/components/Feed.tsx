@@ -42,7 +42,7 @@ export default function Feed({media, position, active=true, preparing=false, err
   const isDesktop=!isMobile, preview=mode==="preview";
   const boxRef=useRef<HTMLDivElement>(null), videoRef=useRef<VideoHandle>(null);
   const lastWheel=useRef(0);
-  const playKey=media?.sessionId || "pending", playUrl=media?.url;
+  const playKey=media ? `${media.sessionId}:${media.version}` : "pending", playUrl=media?.url;
   const [hint,setHint]=useState("");
   const toast=(message:string,_kind?:string)=>setHint(message);
   useEffect(()=>{if(!hint)return;const t=window.setTimeout(()=>setHint(""),2200);return()=>window.clearTimeout(t);},[hint]);

@@ -197,9 +197,21 @@ impl PluginManager {
         if session.expires_at.is_some_and(|t| t <= now() + 5000) {
             return Err(PluginError::cancelled());
         }
-        session.cache.cancel();
         let cancel = session.cancel.child_token();
-        *session.cache.cancel.lock().unwrap() = Some(cancel.clone());
+        let _transfer = {
+            // Register under the same lock as foreground cancellation. A newly
+            // arriving warmup cannot slip past a queued or streaming play request.
+            let _sessions = self.sessions.sessions.lock().unwrap();
+            if self.sessions.foreground.load(Ordering::Acquire) > 0 {
+                return Ok(json!({"bytes":0}));
+            }
+            let Ok(permit) = MEDIA_TRANSFERS.clone().try_acquire_owned() else {
+                return Ok(json!({"bytes":0}));
+            };
+            session.cache.cancel();
+            *session.cache.cancel.lock().unwrap() = Some(cancel.clone());
+            permit
+        };
         let work = async {
             let root = session
                 .resources
@@ -405,7 +417,7 @@ impl PluginManager {
 // Parse only rewritten local references; no upstream URL or credential crosses IPC.
 // Unsupported byte-range playlists are left to normal playback rather than warmed incorrectly.
 fn plan(text: &str, position: f64) -> (Vec<usize>, Vec<(usize, Option<String>)>) {
-    let id = |raw: &str| raw.trim().rsplit('/').next()?.parse::<usize>().ok();
+    let id = |raw: &str| raw.trim().split('?').next()?.rsplit('/').next()?.parse::<usize>().ok();
     let uri = regex::Regex::new(r#"URI="([^"]*)""#).unwrap();
     let attr = |line: &str| uri.captures(line).and_then(|c| id(&c[1]));
     let mut playlists = vec![];

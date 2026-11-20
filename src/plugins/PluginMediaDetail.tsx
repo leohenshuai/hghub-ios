@@ -16,6 +16,7 @@ import { pluginProgressReporter } from "./progressReporter";
 import SourceSwitcher from "./SourceSwitcher";
 import type { SourceStart } from "./sourceMatching";
 import ResolverChooser from "./ResolverChooser";
+import ExternalPlayback from './ExternalPlayback';
 import { useStore } from "../store";
 import { registerBackHandler } from "../back";
 import { setMobileOrientation } from "../orientation";
@@ -145,7 +146,7 @@ export default function PluginMediaDetail({ plugin, mediaId, onBack, manage, act
     if (!viewActive.current || !canPlay) return;
     const n = ++sequence.current;
     const started = performance.now();
-    setBusy(true); setError(""); transitioning.current = reason !== 'refresh';
+    setBusy(true); setError(""); setChoices(null); transitioning.current = reason !== 'refresh';
     if (reason !== 'refresh') { playing.current = false; progress.pause(); }
     if (reason !== "refresh") { void save().catch(() => {}); request.cancelAll(); }
     if (n !== sequence.current) return;
@@ -166,6 +167,7 @@ export default function PluginMediaDetail({ plugin, mediaId, onBack, manage, act
           if (cached) { playbackTiming(cached.sessionId, 'prepared-hit', started); return cached; }
         } else prefetch.clear();
         if (n !== sequence.current) throw { code: 'CANCELLED' };
+        if (reason === 'refresh' && previousSession) return request<PreparedMedia>('media.refresh', { sessionId: previousSession.sessionId, version: previousSession.version });
         return request<PreparedMedia>("media.prepare", { id: plugin.meta.id, ...options, args: { mediaId, episodeId: ep.id, playlistId: listId, serverId, reason: reason === "refresh" ? "refresh" : "play" } });
       };
       const [preparedResult, savedResult] = await Promise.allSettled([
@@ -175,7 +177,7 @@ export default function PluginMediaDetail({ plugin, mediaId, onBack, manage, act
       if (preparedResult.status === 'rejected') throw preparedResult.reason;
       const r = preparedResult.value;
       if (savedResult.status === 'rejected') { releaseMedia(r.sessionId); throw savedResult.reason; }
-      if (n !== sequence.current) { releaseMedia(r.sessionId); return; }
+      if (n !== sequence.current) { if (r.sessionId !== previousSession?.sessionId) releaseMedia(r.sessionId); return; }
       if (reason === 'play') {
         position.current = savedResult.value?.positionSec ?? proposedPosition ?? 0; refreshed.current = false;
         progress.select(ep.id, position.current);
@@ -193,6 +195,11 @@ export default function PluginMediaDetail({ plugin, mediaId, onBack, manage, act
       if (n !== sequence.current) return; setEpisode(current.current?.ep || ep); setError(pluginError(e));
       const available = (e as { playbackChoices?: PreparedMedia["choices"] })?.playbackChoices;
       if (available) setChoices(available);
+      if (available?.external) {
+        if (session.current) releaseMedia(session.current.sessionId);
+        session.current = null; setMedia(null); setEpisode(ep);
+        current.current = { ep, playlistId: listId };
+      }
     } finally { if (n === sequence.current) { transitioning.current = false; setBusy(false); } }
   };
   useEffect(() => {
@@ -369,6 +376,7 @@ export default function PluginMediaDetail({ plugin, mediaId, onBack, manage, act
     {active&&<MediaInteractions plugin={plugin} detail={detail}/>}<button onClick={manage}>管理此插件</button></>:<p>{error||"正在读取作品…"}</p>;
   const favoriteAction = () => { const item = detail || entryItem; if (item) void host.put(plugin.meta.id,item,{favorite:!entry?.favorite}).catch(e=>setError(pluginError(e))); };
   return <div className={`legacy-media-page ${fullPlayback ? "hg-watching" : homePreview ? "hg-discovering" : "hg-detail-entry"}`}>
+    {active && !busy && choices?.external && <div className="absolute inset-x-4 top-4 z-50"><ExternalPlayback key={choices.external.url} target={choices.external}/></div>}
     {playbackRequested &&
     <PluginPlayer {...presentation} playIntent={playIntent} mode={fullPlayback ? "full" : "preview"} onOpenDetail={openDetail} media={canPlay?media:null} preparing={busy && (transitioning.current || !media)} active={active && !detailOpen && !transitioning.current} position={position.current} error={error} onRetry={refresh}
       previousPreview={fullPlayback ? previousEpisode ? {title:previousEpisode.label || '上一集',poster} : undefined : presentation.previousPreview}
@@ -382,12 +390,12 @@ export default function PluginMediaDetail({ plugin, mediaId, onBack, manage, act
       onPreviousEpisode={!busy&&previousEpisode&&!previousEpisode.locked?()=>void advanceEpisode(-1):undefined}
       onNextEpisode={!busy&&((nextEpisode&&!nextEpisode.locked)||(!nextEpisode&&currentList?.next&&plugin.methods.includes('media.listEpisodes')))?()=>void advanceEpisode(1):undefined}
       panels={{detail:detailPanel,episodes:episodesPanel,playback:playbackPanel,comments:plugin.methods.includes("comments.list")?<CommentsPanel embedded plugin={plugin} mediaId={mediaId} episodeId={current.current?.ep.id}/>:undefined}}
-      onPosition={(t,duration)=>{if(transitioning.current || media?.sessionId!==session.current?.sessionId)return;position.current=t;durationRef.current=duration||0;progress.update(t,duration);prepareNext();if(Date.now()-lastSave.current>5000){lastSave.current=Date.now();void save().catch(e=>setError(pluginError(e)));}}}
+      onPosition={(t,duration)=>{if(transitioning.current || (media?.sessionId!==session.current?.sessionId || media?.version!==session.current?.version))return;position.current=t;durationRef.current=duration||0;progress.update(t,duration);prepareNext();if(Date.now()-lastSave.current>5000){lastSave.current=Date.now();void save().catch(e=>setError(pluginError(e)));}}}
       onBuffer={seconds=>{bufferAhead.current=seconds;prepareNext();}}
       onWaiting={()=>{playing.current=false;prefetch.stopWarm();}}
-      onPlaying={()=>{if(transitioning.current || media?.sessionId!==session.current?.sessionId)return;playing.current=true;progress.playing();prepareNext();}}
-      onStopped={()=>{playing.current=false;prefetch.stopWarm();if(transitioning.current || media?.sessionId!==session.current?.sessionId)return;progress.pause();void save().catch(e=>setError(pluginError(e)));}}
-      onEnded={()=>{if(transitioning.current || media?.sessionId!==session.current?.sessionId)return;progress.end();void save().catch(()=>{});if(active&&host.prefs.autoNext){if(fullPlayback)void advanceEpisode(1);else presentation.onNext?.();}}} onFailure={failed}/>}
+      onPlaying={()=>{if(transitioning.current || (media?.sessionId!==session.current?.sessionId || media?.version!==session.current?.version))return;playing.current=true;progress.playing();prepareNext();}}
+      onStopped={()=>{playing.current=false;prefetch.stopWarm();if(transitioning.current || (media?.sessionId!==session.current?.sessionId || media?.version!==session.current?.version))return;progress.pause();void save().catch(e=>setError(pluginError(e)));}}
+      onEnded={()=>{if(transitioning.current || (media?.sessionId!==session.current?.sessionId || media?.version!==session.current?.version))return;progress.end();void save().catch(()=>{});if(active&&host.prefs.autoNext){if(fullPlayback)void advanceEpisode(1);else presentation.onNext?.();}}} onFailure={failed}/>}
     {detailOpen && active && <MediaDetailSheet item={detail || entryItem || null} poster={poster} source={plugin.meta.name}
       favorite={!!entry?.favorite} onFavorite={favoriteAction} onClose={()=>{setDetailOpen(false);if(!homePreview&&!fullPlayback)onBack?.();}}
       onPlay={beginPlayback} busy={busy || !canPlay || !detail || (!media && !currentList?.episodes.some(ep=>!ep.locked) && !currentList?.next)}

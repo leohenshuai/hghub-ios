@@ -232,13 +232,14 @@ pub async fn dispatch(
             args.insert(key.into(), json!(text(target, "id")?));
             args.insert("values".into(), p["values"].clone());
             manager
-                .call(
+                .call_scoped(
                     text(p, "id")?,
                     method,
-                    Value::Object(args),
+                    crate::wire::Transfer::from_json(Value::Object(args)),
                     text(p, "requestId")?.into(),
+                    method == "auth.submit",
                 )
-                .await?
+                .await?.json()
         }
         "call" => {
             manager
@@ -283,6 +284,7 @@ pub async fn dispatch(
                 )
                 .await?
         ),
+        "media.refresh" => json!(manager.refresh_media(text(p, "sessionId")?, p["version"].as_u64().ok_or_else(|| PluginError::invalid("缺少媒体版本"))?, text(p, "requestId")?.into()).await?),
         "media.preload" => {
             manager
                 .preload_media(
@@ -309,6 +311,7 @@ pub async fn dispatch(
                 p["playing"]
                     .as_bool()
                     .ok_or_else(|| PluginError::invalid("缺少 playing"))?,
+                p["version"].as_u64(),
             )?;
             Value::Null
         }

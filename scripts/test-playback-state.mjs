@@ -34,7 +34,7 @@ function setup() {
     useRef(value){const i=cursor++;return refs[i]??=( {current:i===0?video:value} );},
     useEffect(run,deps){const i=cursor++, old=effects.get(i);if(!old||deps.some((v,n)=>v!==old.deps[n]))queued.push(()=>{old?.cleanup?.();effects.set(i,{deps,cleanup:run()});});},
   };
-  props={media:{sessionId:'a',url:'fixture',format:'progressive',playback:{}},position:0,active:true,autoPlay:true,
+  props={media:{sessionId:'a',version:0,url:'fixture',format:'progressive',playback:{}},position:0,active:true,autoPlay:true,
     muted:true,volume:1,rate:1,fit:'contain',scale:1,panX:0,panY:0,isGesturing:false,
     onPlaying:()=>events.push('playing'),onPause:()=>events.push('paused'),onWaiting:()=>events.push('loading'),onError:()=>events.push('error'),
     onTime(){},onDuration(){},onSize(){},onBuffered(){},onClick(){}};
@@ -50,6 +50,13 @@ render({media:{...props.media,sessionId:'b'}});handle.current.play();
 old.reject(new DOMException('old source','NotAllowedError'));await flush();
 assert.equal(events.at(-1),'loading','a previous session cannot mark the new session paused');
 video.readyState=4;video.fire('playing');assert.equal(events.at(-1),'playing');cleanup();
+
+setup();handle.current.play();const beforeRefresh=video.requests.at(-1);
+render({media:{...props.media,version:1,url:'refreshed'},position:42});
+assert.equal(video.src,'refreshed','same-session refresh must reload the new resource version');
+video.fire('loadedmetadata');assert.equal(video.currentTime,42,'refresh preserves current position');
+beforeRefresh.reject(new DOMException('old version','NotAllowedError'));await flush();
+assert.equal(events.at(-1),'loading','old-version play rejection cannot change refreshed state');cleanup();
 
 setup();handle.current.play();const first=video.requests.at(-1);handle.current.play();
 first.reject(new DOMException('superseded','NotAllowedError'));await flush();

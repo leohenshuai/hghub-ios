@@ -103,12 +103,10 @@ export async function testFrontend({ page, browser, dispatch, base, ui, root, ou
   assert.deepEqual(await page.evaluate(()=>JSON.parse(localStorage.getItem("hpp.searchHistory"))),[]);
   await page.getByRole("textbox",{name:"搜索所有插件"}).fill("城市");
   await page.getByRole("textbox",{name:"搜索所有插件"}).press("Enter");
-  await page.getByRole("button",{name:"搜索来源与筛选",exact:true}).click();
-  await page.getByLabel("搜索范围",{exact:true}).selectOption("single");
+  await page.locator(".refined-scope-segments").getByRole("button", { name: "单个来源", exact: true }).click();
   await page.getByRole("textbox",{name:"搜索所有插件"}).press("Enter");
   await page.waitForFunction(()=>document.querySelectorAll(".legacy-search-poster").length===2&&[...document.querySelectorAll(".legacy-search-poster img")].every(i=>i.naturalWidth>0));
-  await page.getByLabel("搜索范围",{exact:true}).selectOption("all");
-  await page.getByRole("button",{name:"搜索来源与筛选",exact:true}).click();
+  await page.locator(".refined-scope-segments").getByRole("button", { name: "综合", exact: true }).click();
   await page.getByRole("textbox",{name:"搜索所有插件"}).press("Enter");
   await page.locator(".legacy-search-poster").filter({hasText:"2 个来源"}).first().click();
   await page.locator(".hpp-source-choice button").filter({hasText:"光影放映室"}).first().click();

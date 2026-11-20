@@ -16,6 +16,7 @@ pub mod network_policy;
 mod resolver_preferences;
 mod runtime;
 mod store;
+pub mod web_login;
 pub mod wire;
 
 pub use error::{PluginError, Result};
