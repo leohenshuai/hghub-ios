@@ -78,6 +78,7 @@ pub struct PluginManager {
     pub(crate) resolver_preferences: crate::resolver_preferences::ResolverPreferences,
     pub sessions: crate::media::MediaSessions,
     pub library: crate::library::Library,
+    pub diagnostics: Arc<crate::diagnostics::Diagnostics>,
 }
 impl PluginManager {
     pub fn open(root: PathBuf) -> Result<Self> {
@@ -136,6 +137,7 @@ impl PluginManager {
             resolver_preferences,
             sessions: Default::default(),
             library,
+            diagnostics: Default::default(),
         })
     }
     pub fn with_document_reader(mut self, reader: Arc<dyn DocumentReader>) -> Self {
@@ -668,8 +670,31 @@ impl PluginManager {
         &self,
         id: &str,
         method: &str,
+        params: Transfer,
+        request_id: String,
+    ) -> Result<Transfer> {
+        let started = Instant::now();
+        let brief = if method == "transformResource" { Value::Null } else { params.json() };
+        let warnings = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+        let result = self.call_transfer_inner(id, method, params, request_id, warnings.clone()).await;
+        if method != "transformResource" || result.is_err() {
+            let (name, version) = match self.get(id).await {
+                Ok(p) => { let p = p.lock().await; (p.entry.meta.name.clone(), p.entry.meta.version.clone()) }
+                Err(_) => (id.to_string(), String::new()),
+            };
+            let err = result.as_ref().err().map(|e| (e.code.as_str(), e.message.as_str()));
+            self.diagnostics.record_call(id, &name, &version, method, &brief, started.elapsed().as_millis() as u64, err,
+                warnings.load(std::sync::atomic::Ordering::Relaxed));
+        }
+        result
+    }
+    async fn call_transfer_inner(
+        &self,
+        id: &str,
+        method: &str,
         mut params: Transfer,
         request_id: String,
+        warn_count: Arc<std::sync::atomic::AtomicUsize>,
     ) -> Result<Transfer> {
         if request_id.is_empty() || request_id.len() > 128 {
             return Err(PluginError::invalid("requestId 无效"));
@@ -719,7 +744,9 @@ impl PluginManager {
             meta.allow_insecure_http,
             &mut warnings,
         );
+        warn_count.store(warnings.len(), std::sync::atomic::Ordering::Relaxed);
         for warning in warnings {
+            self.diagnostics.record_event(id, "warn", &format!("{method} 返回数据被修正：{warning}"));
             crate::native::validation_log(&logs, "warn", &warning, &request_id);
         }
         if let Err(e) = &validated {
@@ -752,6 +779,32 @@ impl PluginManager {
                 w.cancel(request_id);
             }
         }
+    }
+    /// 全局诊断：所有插件的汇总（含当前状态与运行时故障）+ 最近事件
+    pub async fn diagnostics(&self, plugin: Option<String>, only_errors: bool, limit: usize) -> Result<Value> {
+        let list = self.plugins.read().await.iter().map(|(k, v)| (k.clone(), v.clone())).collect::<Vec<_>>();
+        let mut states = Vec::new();
+        let mut runtime_events = Vec::new();
+        for (id, p) in list {
+            let p = p.lock().await;
+            let fault = p.worker.as_ref().and_then(|w| w.fault());
+            states.push(json!({
+                "plugin": id, "name": p.entry.meta.name, "version": p.entry.meta.version,
+                "enabled": p.entry.enabled, "running": p.worker.is_some(),
+                "error": p.error.as_ref().map(|e| json!({"code": e.code, "message": e.message})),
+                "fault": fault.map(|e| e.message),
+            }));
+            for l in p.logs.lock().unwrap().iter() {
+                if matches!(l["level"].as_str(), Some("error")) && l["requestId"].is_null() {
+                    runtime_events.push(json!({"at": l["at"], "kind": "event", "plugin": id, "level": "error", "message": l["text"]}));
+                }
+            }
+        }
+        let mut events = self.diagnostics.events(plugin.as_deref(), only_errors, limit);
+        events.extend(runtime_events.into_iter().filter(|e| plugin.as_deref().map_or(true, |p| e["plugin"] == p)));
+        events.sort_by(|a, b| b["at"].as_u64().cmp(&a["at"].as_u64()));
+        events.truncate(limit.clamp(1, 3000));
+        Ok(json!({ "at": crate::store::now(), "plugins": states, "summary": self.diagnostics.summary(), "events": events }))
     }
     pub async fn logs(&self, id: &str) -> Result<Vec<Value>> {
         let p = self.get(id).await?;
