@@ -14,7 +14,7 @@
 .legacy-panel-body button{cursor:pointer;border-radius:4px;padding:7px 10px;background:var(--p-s3);font-size:12px}
 .legacy-panel-body button:disabled{opacity:.4}
 .legacy-panel-body .hpp-episodes{display:grid;grid-template-columns:repeat(auto-fill,minmax(56px,1fr));justify-content:start;gap:8px;margin:12px 0}
-.legacy-panel-body .hpp-episodes button{min-height:40px;padding:6px 3px}
+.legacy-panel-body .hpp-episodes button{min-height:40px;padding:6px 3px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;text-align:center}
 .legacy-panel-body button.selected{background:var(--p-primary);color:var(--p-on-primary)}
 .legacy-panel-body .hpp-playlists{display:flex;flex-wrap:wrap;gap:6px}
 .legacy-panel-body select{max-width:100%;background:var(--p-s3);padding:8px;color:var(--p-on);border-radius:5px}

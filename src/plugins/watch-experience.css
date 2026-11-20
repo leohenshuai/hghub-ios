@@ -99,7 +99,7 @@
 .hg-episode-ranges button{flex:1;min-width:72px;white-space:nowrap;padding:8px;font-size:13px;color:var(--p-mut);background:none}
 .hg-episode-ranges button[aria-pressed=true]{color:var(--p-on);font-weight:700}
 .hg-episode-picker .hpp-episodes{display:grid;grid-template-columns:repeat(auto-fill,minmax(56px,1fr));justify-content:start;gap:8px;margin:0}
-.hg-episode-picker .hpp-episodes button{position:relative;min-height:48px;border-radius:12px;background:var(--p-s3);font-size:14px;font-weight:600;padding:6px 2px}
+.hg-episode-picker .hpp-episodes button{position:relative;display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:48px;border-radius:12px;background:var(--p-s3);font-size:14px;font-weight:600;padding:6px 2px}
 .hg-episode-picker .hpp-episodes button.selected{background:color-mix(in srgb,var(--p-primary) 14%,transparent);color:var(--p-primary)}
 .hg-episode-picker button:disabled{opacity:.35;cursor:not-allowed}
 .hg-episode-picker .hpp-episodes i{position:absolute;top:5px;right:5px;font-size:6px;font-style:normal;letter-spacing:1px}
