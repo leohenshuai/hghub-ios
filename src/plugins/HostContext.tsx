@@ -1,20 +1,21 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { onPluginAuthFailure, onPluginAuthSuccess, pluginCommand, pluginError, type InstalledPlugin } from "./client";
 import type { MediaItem } from "./protocol";
+import { scheduleStartupCheck } from "./sourceCheck";
 import { clearMetadataCache } from './metadataCache';
 import { emptyUpdateState, pendingUpdates, tickPluginUpdates, type UpdateState } from "./updateClient";
 
 export interface LocalProgress { pluginId: string; mediaId: string; playlistId?: string; episodeId: string; positionSec: number; durationSec?: number; at: number }
 export interface LibraryEntry { pluginId: string; mediaId: string; item: MediaItem; favorite: boolean; tracking: boolean; updatedAt: number; lastProgress?: LocalProgress; latestLabel?: string }
-export interface Preferences { homeMode: "all" | "single" | "multiple"; homeIds: string[]; order: string[]; hiddenHomeIds: string[]; hiddenSections: string[]; sectionOrder: Record<string, string[]>; searchMode: "all" | "single" | "multiple"; searchIds: string[]; mature: boolean; playbackFallback: boolean; autoNext: boolean }
-const defaults: Preferences = { homeMode: "all", homeIds: [], order: [], hiddenHomeIds: [], hiddenSections: [], sectionOrder: {}, searchMode: "all", searchIds: [], mature: false, playbackFallback: true, autoNext: true };
+export interface Preferences { homeMode: "all" | "single" | "multiple"; homeIds: string[]; order: string[]; hiddenHomeIds: string[]; hiddenSections: string[]; sectionOrder: Record<string, string[]>; searchMode: "all" | "single" | "multiple"; searchIds: string[]; mature: boolean; startupCheck: boolean; playbackFallback: boolean; autoNext: boolean }
+const defaults: Preferences = { homeMode: "all", homeIds: [], order: [], hiddenHomeIds: [], hiddenSections: [], sectionOrder: {}, searchMode: "all", searchIds: [], mature: false, startupCheck: false, playbackFallback: true, autoNext: true };
 function readPreferences(): Preferences {
   try {
     const raw = JSON.parse(localStorage.getItem("hpp.preferences") || "{}"), p = { ...defaults };
     for (const key of ["homeMode", "searchMode"] as const) if (["all", "single", "multiple"].includes(raw[key])) p[key] = raw[key];
     for (const key of ["homeIds", "searchIds", "order", "hiddenHomeIds", "hiddenSections"] as const) if (Array.isArray(raw[key])) p[key] = [...new Set<string>(raw[key].filter((v: unknown) => typeof v === "string"))];
     if (raw.sectionOrder && typeof raw.sectionOrder === "object" && !Array.isArray(raw.sectionOrder)) p.sectionOrder = Object.fromEntries(Object.entries(raw.sectionOrder).filter(([,v]) => Array.isArray(v)).map(([id,v]) => [id, [...new Set((v as unknown[]).filter((id): id is string => typeof id === "string"))]]));
-    p.mature = raw.mature === true; p.playbackFallback = raw.playbackFallback !== false; p.autoNext = raw.autoNext !== false; return p;
+    p.mature = raw.mature === true; p.startupCheck = raw.startupCheck === true; p.playbackFallback = raw.playbackFallback !== false; p.autoNext = raw.autoNext !== false; return p;
   } catch { return defaults; }
 }
 const Ctx = createContext<{
@@ -66,6 +67,13 @@ export function HostProvider({ children }: { children: React.ReactNode }) {
     const changed = () => { clearMetadataCache(); void reload(); void refreshLibrary().catch(e => setError(pluginError(e))); };
     window.addEventListener("hpp.changed", changed); return () => window.removeEventListener("hpp.changed", changed);
   }, [reload, refreshLibrary]);
+  // 启动时体检（默认关闭）：延后 20 秒、串行跑，结果存起来给诊断中心看。一天最多一次。
+  const startupDone = useRef(false);
+  useEffect(() => {
+    if (!prefs.startupCheck || startupDone.current || !ready || !plugins.length) return;
+    startupDone.current = true;
+    return scheduleStartupCheck(plugins);
+  }, [prefs.startupCheck, ready, plugins]);
   useEffect(() => onPluginAuthFailure(f => { clearMetadataCache(); if (!f.silent) setAuthPrompt(f); }), []);
   useEffect(() => onPluginAuthSuccess(id => { clearMetadataCache(); setAuthPrompt(old => old?.id === id ? null : old); }), []);
   const sources = useMemo(() => plugins.filter(p => p.enabled && p.meta.kind !== "resolver" && ["ready", "unloaded"].includes(p.status) && (prefs.mature || !p.meta.mature)).sort((a,b) => {

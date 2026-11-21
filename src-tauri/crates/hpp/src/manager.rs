@@ -803,6 +803,38 @@ impl PluginManager {
             }
         }
     }
+    /// 体检探针：按插件给的请求头真实拉一次媒体地址（HLS 读清单开头，普通视频读开头几十 KB）。
+    /// 走插件自己的网络规则，所以结果等同于实际播放时的情况；只返回状态与开头少量文本，不回传整段内容。
+    pub async fn probe_media(&self, plugin_id: &str, url: &str, headers: Value, hls: bool) -> Result<Value> {
+        let meta = self.meta(plugin_id).await?;
+        let network = self.network(plugin_id).await?;
+        let mut h = crate::network::headers(&json!(meta.default_headers))?;
+        h.extend(crate::network::headers(&headers)?);
+        if !hls {
+            h.insert("range", "bytes=0-65535".parse().map_err(|_| PluginError::invalid("Range 无效"))?);
+        }
+        let cancel = tokio_util::sync::CancellationToken::new();
+        let res = tokio::time::timeout(
+            std::time::Duration::from_secs(20),
+            network.request(url, reqwest::Method::GET, h, None, true, true, crate::network::Queue::Media, &cancel),
+        )
+        .await
+        .map_err(|_| PluginError::timeout())?;
+        let resp = match res {
+            Ok(v) => v,
+            Err(e) => return Ok(json!({"ok": false, "status": 0, "error": e.message})),
+        };
+        let status = resp.status().as_u16();
+        let ctype = resp.headers().get("content-type").and_then(|v| v.to_str().ok()).unwrap_or("").split(';').next().unwrap_or("").to_string();
+        let bytes = tokio::time::timeout(std::time::Duration::from_secs(20), resp.bytes()).await
+            .map_err(|_| PluginError::timeout())?
+            .map_err(|e| PluginError::new("UPSTREAM_ERROR", e.to_string()))?;
+        let head: String = String::from_utf8_lossy(&bytes[..bytes.len().min(256)]).chars().take(160).collect();
+        Ok(json!({
+            "ok": (200..400).contains(&status) && !bytes.is_empty(),
+            "status": status, "contentType": ctype, "bytes": bytes.len(), "bodyHead": head,
+        }))
+    }
     /// 全局诊断：所有插件的汇总（含当前状态与运行时故障）+ 最近事件
     pub async fn diagnostics(&self, plugin: Option<String>, only_errors: bool, limit: usize) -> Result<Value> {
         let list = self.plugins.read().await.iter().map(|(k, v)| (k.clone(), v.clone())).collect::<Vec<_>>();

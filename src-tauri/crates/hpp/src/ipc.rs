@@ -202,6 +202,16 @@ pub async fn dispatch(
             manager.diagnostics.record_event(&plugin, level, &text);
             Value::Null
         }
+        "diagnostics.probe" => {
+            manager
+                .probe_media(
+                    text(p, "id")?,
+                    text(p, "url")?,
+                    p["headers"].clone(),
+                    p["hls"].as_bool().unwrap_or(false),
+                )
+                .await?
+        }
         "diagnostics.clear" => {
             manager.diagnostics.clear();
             Value::Null

@@ -1,7 +1,9 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { IBack, IRefresh } from "../icons";
 import { pluginError } from "./client";
 import { usePluginRequests } from "./usePluginRequests";
+import { useHost } from "./HostContext";
+import { checkAll, readChecks, saveChecks, type CheckResult, type Progress } from "./sourceCheck";
 
 type Ev = { at: number; kind: "call" | "event"; plugin: string; name?: string; version?: string; method?: string; ms?: number; ok?: boolean; code?: string; message?: string; level?: string; params?: Record<string, unknown>; warnings?: number };
 type MethodStat = { method: string; calls: number; errors: number; avgMs: number; maxMs: number };
@@ -29,6 +31,19 @@ export default function DiagnosticsPage({ onBack }: { onBack: () => void }) {
   const request = usePluginRequests();
   const [report, setReport] = useState<Report | null>(null), [error, setError] = useState(""), [busy, setBusy] = useState(false);
   const [focus, setFocus] = useState<string | null>(null), [onlyErrors, setOnlyErrors] = useState(false), [copied, setCopied] = useState("");
+  const host = useHost();
+  // 体检：用本机网络真实跑一遍每个源（列表→详情→解析→拉视频流），结论与实际观看一致
+  const [checks, setChecks] = useState<CheckResult[] | null>(() => readChecks()?.results || null), [progress, setProgress] = useState<Progress | null>(null);
+  const [checkedAt] = useState(() => readChecks()?.at || 0);
+  const abort = useRef<AbortController | null>(null);
+  const runCheck = async () => {
+    if (progress) { abort.current?.abort(); setProgress(null); return; }
+    const ac = new AbortController(); abort.current = ac;
+    setChecks(null); setProgress({ done: 0, total: 0, current: "准备中" });
+    try { const r = await checkAll(host.plugins, setProgress, ac.signal); setChecks(r); if (r.length) saveChecks(r); }
+    catch (e) { setError(pluginError(e)); }
+    finally { setProgress(null); }
+  };
   const load = async () => {
     setBusy(true); setError("");
     try { setReport(await request<Report>("diagnostics", { limit: 800 })); } catch (e) { setError(pluginError(e)); } finally { setBusy(false); }
@@ -68,6 +83,15 @@ export default function DiagnosticsPage({ onBack }: { onBack: () => void }) {
     catch { setCopied("复制失败：剪贴板不可用"); }
     setTimeout(() => setCopied(""), 2500);
   };
+  const copyChecks = async () => {
+    if (!checks) return;
+    const text = [`HGhub 源体检 ${new Date().toLocaleString("zh-CN", { hour12: false })}（本机网络）`,
+      ...[...checks].sort((a, b) => ({ bad: 0, warn: 1, skip: 2, ok: 3 })[a.state] - ({ bad: 0, warn: 1, skip: 2, ok: 3 })[b.state])
+        .map(c => `\n## ${({ ok: "🟢", warn: "🟡", bad: "🔴", skip: "⚪" })[c.state]} ${c.name} ${c.version} · ${(c.ms / 1000).toFixed(1)}s\n` +
+          c.steps.map(x => `  ${x.ok ? "✓" : "✗"} ${x.name}${x.detail ? "：" + x.detail : ""}`).join("\n"))].join("\n");
+    try { await navigator.clipboard.writeText(text); setCopied("已复制体检结果"); } catch { setCopied("复制失败：剪贴板不可用"); }
+    setTimeout(() => setCopied(""), 2500);
+  };
   const clear = async () => { try { await request("diagnostics.clear"); await load(); } catch (e) { setError(pluginError(e)); } };
 
   const totals = rows.reduce((a, r) => { const t = health(r.s, r.st).tone; a[t] = (a[t] || 0) + 1; return a; }, {} as Record<string, number>);
@@ -81,6 +105,7 @@ export default function DiagnosticsPage({ onBack }: { onBack: () => void }) {
       <div className="px-4 pb-3 flex flex-wrap gap-2 text-[11px]">
         {(["bad", "warn", "ok", "idle"] as const).map(t => <span key={t} className="px-2 py-1 rounded-full bg-s3 text-on"><i style={{ display: "inline-block", width: 7, height: 7, borderRadius: 9, background: toneColor[t], marginRight: 5 }} />{({ bad: "异常", warn: "有失败", ok: "正常", idle: "未调用" })[t]} {totals[t] || 0}</span>)}
         <button className="px-2 py-1 rounded-full bg-s3 text-primary" onClick={() => void copy(true)}>复制全部报告</button>
+        <button className="px-2 py-1 rounded-full bg-s3 text-primary" onClick={() => void runCheck()}>{progress ? `体检中 ${progress.done}/${progress.total} 停止` : "体检全部源"}</button>
         <button className="px-2 py-1 rounded-full bg-s3 text-mut" onClick={() => void clear()}>清空</button>
       </div>
     </div>
@@ -88,6 +113,25 @@ export default function DiagnosticsPage({ onBack }: { onBack: () => void }) {
       {error && <p className="text-[12px] text-red-400 p-2">{error}</p>}
       {copied && <p className="text-[12px] text-primary p-2" role="status">{copied}</p>}
       <p className="text-[10.5px] text-mut px-1 py-2">自动记录所有源的每次调用（首页、分类、搜索、详情、播放…），每 5 秒刷新。参数里不记录账号密码。出问题时点「复制报告」发给开发者。</p>
+      {(progress || checks) && <div className="rounded-(--r-sm) bg-s1 mb-2 p-3">
+        <div className="flex items-center gap-2 mb-1">
+          <strong className="text-[12.5px] text-on">体检结果</strong>
+          {progress && <span className="text-[10.5px] text-mut">正在检查 {progress.current}（{progress.done}/{progress.total}）</span>}
+          {checks && !progress && <span className="text-[10.5px] text-mut">{checkedAt ? time(checkedAt) + " · " : ""}{checks.filter(c => c.state === "ok").length} 正常 · {checks.filter(c => c.state === "warn").length} 有小问题 · {checks.filter(c => c.state === "bad").length} 播不了</span>}
+        </div>
+        {progress && progress.total > 0 && <div style={{ height: 3, background: "var(--p-s3)", borderRadius: 9, overflow: "hidden", marginBottom: 8 }}>
+          <div style={{ width: `${Math.round(progress.done / progress.total * 100)}%`, height: "100%", background: toneColor.ok, transition: "width .3s" }} />
+        </div>}
+        {checks && [...checks].sort((a, b) => ({ bad: 0, warn: 1, skip: 2, ok: 3 })[a.state] - ({ bad: 0, warn: 1, skip: 2, ok: 3 })[b.state]).map(c => (
+          <div key={c.id} className="flex gap-2 py-1 text-[11px] border-b border-s3 last:border-0">
+            <i style={{ width: 8, height: 8, borderRadius: 9, marginTop: 4, flexShrink: 0, background: c.state === "ok" ? toneColor.ok : c.state === "warn" ? toneColor.warn : c.state === "bad" ? toneColor.bad : toneColor.idle }} />
+            <span className="flex-1 min-w-0"><b className="text-on">{c.name}</b> <span className="text-mut">{c.steps.map(x => (x.ok ? "" : "✗") + x.name + (x.detail ? " " + x.detail : "")).join(" · ")}</span></span>
+            <span className="text-mut shrink-0">{(c.ms / 1000).toFixed(1)}s</span>
+          </div>
+        ))}
+        {checks && !progress && <button className="mt-2 px-2 py-1 rounded-full bg-s3 text-primary text-[11px]" onClick={() => void copyChecks()}>复制体检结果</button>}
+      </div>}
+
       {rows.map(({ st, s }) => {
         const h = health(s, st), open = focus === st.plugin;
         return <div key={st.plugin} className="rounded-(--r-sm) bg-s1 mb-2 overflow-hidden">
