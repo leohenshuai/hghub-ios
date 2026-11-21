@@ -696,7 +696,10 @@ impl PluginManager {
         let started = Instant::now();
         let brief = if method == "transformResource" { Value::Null } else { params.json() };
         let warnings = Arc::new(std::sync::atomic::AtomicUsize::new(0));
-        let result = self.call_scoped_inner(id, method, params, request_id, user_auth, warnings.clone()).await;
+        // 进入插件自己的代码之前花掉的时间（等插件锁、冷启动建 runtime、endpoints.list 预热）。
+        // 不分开记，诊断里会把它算成「站点慢」：海角 2026-11-21 报告的 104 秒实际是冷启动，站点只用 1 秒。
+        let setup = Arc::new(std::sync::atomic::AtomicU64::new(0));
+        let result = self.call_scoped_inner(id, method, params, request_id, user_auth, warnings.clone(), setup.clone()).await;
         if method != "transformResource" || result.is_err() {
             let (name, version) = match self.get(id).await {
                 Ok(p) => { let p = p.lock().await; (p.entry.meta.name.clone(), p.entry.meta.version.clone()) }
@@ -704,7 +707,8 @@ impl PluginManager {
             };
             let err = result.as_ref().err().map(|e| (e.code.as_str(), e.message.as_str()));
             self.diagnostics.record_call(id, &name, &version, method, &brief, started.elapsed().as_millis() as u64, err,
-                warnings.load(std::sync::atomic::Ordering::Relaxed));
+                warnings.load(std::sync::atomic::Ordering::Relaxed),
+                setup.load(std::sync::atomic::Ordering::Relaxed));
         }
         result
     }
@@ -716,7 +720,9 @@ impl PluginManager {
         request_id: String,
         user_auth: bool,
         warn_count: Arc<std::sync::atomic::AtomicUsize>,
+        setup_ms: Arc<std::sync::atomic::AtomicU64>,
     ) -> Result<Transfer> {
+        let entered = Instant::now();
         if request_id.is_empty() || request_id.len() > 128 {
             return Err(PluginError::invalid("requestId 无效"));
         }
@@ -740,6 +746,8 @@ impl PluginManager {
             }
             (w, p.entry.meta.clone(), p.logs.clone())
         };
+        // 到这里为止都是宿主开销（锁等待 + 冷启动），插件代码还没跑
+        setup_ms.store(entered.elapsed().as_millis() as u64, std::sync::atomic::Ordering::Relaxed);
         let result = w
             .call_scoped(
                 request_id.clone(),

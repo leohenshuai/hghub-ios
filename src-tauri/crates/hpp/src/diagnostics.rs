@@ -21,6 +21,10 @@ struct Stat {
     errors: u64,
     total_ms: u64,
     max_ms: u64,
+    /// 其中花在宿主侧（排队、冷启动建 runtime）的毫秒数，用来把它和「站点慢」区分开
+    setup_ms: u64,
+    /// 单次调用里扣掉宿主开销后的峰值，判定「响应偏慢」要用这个而不是 max_ms
+    max_site_ms: u64,
     last_at: u64,
     last_error: Option<Value>,
     codes: BTreeMap<String, u64>,
@@ -67,12 +71,15 @@ impl Diagnostics {
         ms: u64,
         error: Option<(&str, &str)>,
         warnings: usize,
+        setup_ms: u64,
     ) {
         let at = now();
         let mut ev = json!({
             "at": at, "kind": "call", "plugin": plugin, "name": name, "version": version,
             "method": method, "ms": ms, "ok": error.is_none(),
         });
+        // 冷启动/排队占比大时单独标出，否则「平均 52 秒」会被误读成站点慢
+        if setup_ms >= 500 { ev["setupMs"] = json!(setup_ms); }
         let b = brief(method, params);
         if !b.is_null() { ev["params"] = b; }
         if warnings > 0 { ev["warnings"] = json!(warnings); }
@@ -85,7 +92,9 @@ impl Diagnostics {
             let s = stats.entry((plugin.to_string(), method.to_string())).or_default();
             s.calls += 1;
             s.total_ms += ms;
+            s.setup_ms += setup_ms;
             s.max_ms = s.max_ms.max(ms);
+            s.max_site_ms = s.max_site_ms.max(ms.saturating_sub(setup_ms));
             s.last_at = at;
             if let Some((code, message)) = error {
                 s.errors += 1;
@@ -151,6 +160,8 @@ impl Diagnostics {
             let errors: u64 = methods.iter().map(|(_, s)| s.errors).sum();
             let total: u64 = methods.iter().map(|(_, s)| s.total_ms).sum();
             let max_ms = methods.iter().map(|(_, s)| s.max_ms).max().unwrap_or(0);
+            // 扣掉宿主冷启动/排队后的站点侧峰值：「响应偏慢」要按它判，否则一次冷启动就误报
+            let max_site_ms = methods.iter().map(|(_, s)| s.max_site_ms).max().unwrap_or(0);
             let last_at = methods.iter().map(|(_, s)| s.last_at).max().unwrap_or(0);
             let mut codes: BTreeMap<String, u64> = BTreeMap::new();
             for (_, s) in &methods { for (c, n) in &s.codes { *codes.entry(c.clone()).or_default() += n; } }
@@ -158,10 +169,12 @@ impl Diagnostics {
                 .filter_map(|(m, s)| s.last_error.clone().map(|mut e| { e["method"] = json!(m); e }))
                 .max_by_key(|e| e["at"].as_u64().unwrap_or(0));
             let faults = events.iter().filter(|e| e["plugin"] == plugin.as_str() && e["kind"] == "event" && e["level"] == "error").count();
-            // 播放器真正播不出来的次数（插件解析成功不代表能播）：前端上报的 MEDIA_ERR 与媒体代理失败
+            // 播放器真正播不出来的次数（插件解析成功不代表能播）：前端上报的 MEDIA_ERR 与媒体代理失败。
+            // CANCELLED 不算失败：播放器每次 seek、切清晰度或关闭页面都会中断在途的 Range 请求，
+            // 把它计进去会让正常播放的源显示成「播放失败 N 次」（91porn 2026-11-21 报告即如此）。
             let play_failures = events.iter().filter(|e| e["plugin"] == plugin.as_str() && (
                 (e["kind"] == "event" && e["message"].as_str().is_some_and(|m| m.starts_with("播放器错误")))
-                || (e["kind"] == "media" && e["ok"] == false))).count();
+                || (e["kind"] == "media" && e["ok"] == false && e["code"] != "CANCELLED"))).count();
             let plays: u64 = methods.iter().filter(|(m, _)| matches!(m.as_str(), "media.resolvePlayback" | "live.resolve" | "resolver.resolve" | "article.prepare")).map(|(_, s)| s.calls).sum();
             let name = events.iter().rev().find(|e| e["plugin"] == plugin.as_str() && e["name"].is_string())
                 .map(|e| e["name"].clone()).unwrap_or(json!(plugin));
@@ -170,11 +183,12 @@ impl Diagnostics {
             out.push(json!({
                 "plugin": plugin, "name": name, "version": version,
                 "calls": calls, "errors": errors, "faults": faults, "playFailures": play_failures, "plays": plays,
-                "avgMs": if calls > 0 { total / calls } else { 0 }, "maxMs": max_ms, "lastAt": last_at,
+                "avgMs": if calls > 0 { total / calls } else { 0 }, "maxMs": max_ms, "maxSiteMs": max_site_ms, "lastAt": last_at,
                 "codes": codes, "lastError": last_error,
                 "methods": methods.iter().map(|(m, s)| json!({
                     "method": m, "calls": s.calls, "errors": s.errors,
                     "avgMs": if s.calls > 0 { s.total_ms / s.calls } else { 0 }, "maxMs": s.max_ms,
+                    "setupMs": s.setup_ms,
                 })).collect::<Vec<_>>(),
             }));
         }
@@ -197,9 +211,9 @@ mod tests {
     #[test]
     fn records_and_summarizes() {
         let d = Diagnostics::default();
-        d.record_call("a", "A", "1.0", "catalog.list", &json!({"categoryId":"x","password":"p"}), 120, None, 0);
-        d.record_call("a", "A", "1.0", "catalog.list", &json!({}), 300, Some(("TIMEOUT", "超时")), 0);
-        d.record_call("b", "B", "2.0", "auth.submit", &json!({"values":{"pw":"secret"}}), 10, None, 0);
+        d.record_call("a", "A", "1.0", "catalog.list", &json!({"categoryId":"x","password":"p"}), 120, None, 0, 0);
+        d.record_call("a", "A", "1.0", "catalog.list", &json!({}), 300, Some(("TIMEOUT", "超时")), 0, 0);
+        d.record_call("b", "B", "2.0", "auth.submit", &json!({"values":{"pw":"secret"}}), 10, None, 0, 0);
         d.record_event("a", "error", "运行时连续故障");
         let s = d.summary();
         assert_eq!(s[0]["plugin"], "a");
@@ -210,5 +224,19 @@ mod tests {
         let ev = d.events(None, false, 10);
         assert!(ev.iter().all(|e| !e.to_string().contains("secret") && !e.to_string().contains("password")));
         assert_eq!(d.events(Some("a"), true, 10).len(), 2);
+    }
+    #[test]
+    fn splits_setup_time_and_ignores_cancelled_media() {
+        let d = Diagnostics::default();
+        // 冷启动 52 秒、插件自己只用 1 秒：setupMs 要能看出来（海角 2026-11-21 的 104 秒就是这种）
+        d.record_call("c", "C", "1.0", "catalog.getCategories", &json!({}), 53_000, None, 0, 52_000);
+        // 播放器 seek/关页会取消在途 Range 请求，不该算播放失败（91porn 2026-11-21 报告的 6 次）
+        d.record_media("c", "GET", Some("bytes=0-"), 0, "", "", 5, Some(("CANCELLED", "调用已取消")));
+        d.record_media("c", "GET", Some("bytes=0-"), 0, "", "", 5, Some(("NETWORK", "连不上")));
+        let s = d.summary();
+        assert_eq!(s[0]["methods"][0]["setupMs"], 52_000);
+        assert_eq!(s[0]["maxMs"], 53_000);
+        assert_eq!(s[0]["maxSiteMs"], 1_000);   // 站点只用了 1 秒，不该被判「响应偏慢」
+        assert_eq!(s[0]["playFailures"], 1);
     }
 }

@@ -5,9 +5,9 @@ import { usePluginRequests } from "./usePluginRequests";
 import { useHost } from "./HostContext";
 import { checkAll, readChecks, saveChecks, type CheckResult, type Progress } from "./sourceCheck";
 
-type Ev = { at: number; kind: "call" | "event"; plugin: string; name?: string; version?: string; method?: string; ms?: number; ok?: boolean; code?: string; message?: string; level?: string; params?: Record<string, unknown>; warnings?: number };
-type MethodStat = { method: string; calls: number; errors: number; avgMs: number; maxMs: number };
-type Sum = { plugin: string; name: string; version?: string; calls: number; errors: number; faults: number; playFailures?: number; plays?: number; avgMs: number; maxMs: number; lastAt: number; codes: Record<string, number>; lastError?: { at: number; code: string; message: string; method: string }; methods: MethodStat[] };
+type Ev = { at: number; kind: "call" | "event" | "media"; plugin: string; name?: string; version?: string; method?: string; ms?: number; ok?: boolean; code?: string; message?: string; level?: string; params?: Record<string, unknown>; warnings?: number; status?: number; contentType?: string; range?: string };
+type MethodStat = { method: string; calls: number; errors: number; avgMs: number; maxMs: number; setupMs?: number };
+type Sum = { plugin: string; name: string; version?: string; calls: number; errors: number; faults: number; playFailures?: number; plays?: number; avgMs: number; maxMs: number; maxSiteMs?: number; lastAt: number; codes: Record<string, number>; lastError?: { at: number; code: string; message: string; method: string }; methods: MethodStat[] };
 type State = { plugin: string; name: string; version: string; enabled: boolean; running: boolean; error?: { code: string; message: string } | null; fault?: string | null };
 type Report = { at: number; plugins: State[]; summary: Sum[]; events: Ev[] };
 
@@ -21,7 +21,9 @@ const health = (s?: Sum, st?: State) => {
   const r = s.errors / s.calls;
   if (r >= 0.5) return { tone: "bad", text: `失败率 ${Math.round(r * 100)}%` };
   if (pf) return { tone: "warn", text: `播放失败 ${pf}${plays ? "/" + plays : ""} 次` };
-  if (r > 0 || s.maxMs > 20000) return { tone: "warn", text: r > 0 ? `失败 ${s.errors}/${s.calls}` : "响应偏慢" };
+  // maxMs 含宿主侧的排队与冷启动（首次调用要建 QuickJS runtime）：按 maxSiteMs 判，否则冷启动一次就报「响应偏慢」
+  const siteMax = s.maxSiteMs ?? s.maxMs;
+  if (r > 0 || siteMax > 20000) return { tone: "warn", text: r > 0 ? `失败 ${s.errors}/${s.calls}` : "响应偏慢" };
   return { tone: "ok", text: "正常" };
 };
 const toneColor: Record<string, string> = { ok: "#3ecf8e", warn: "#f5a623", bad: "#ff5f56", idle: "#7a7a85" };
@@ -73,10 +75,15 @@ export default function DiagnosticsPage({ onBack }: { onBack: () => void }) {
       if (st.error) lines.push(`加载：${st.error.code} ${st.error.message}`);
       if (s) {
         lines.push(`调用 ${s.calls} 次，失败 ${s.errors}，播放器失败 ${s.playFailures || 0}，平均 ${s.avgMs}ms，最长 ${s.maxMs}ms` + (Object.keys(s.codes).length ? `，错误码 ${Object.entries(s.codes).map(([c, n]) => `${c}×${n}`).join(" ")}` : ""));
-        for (const m of s.methods) lines.push(`  ${m.method}: ${m.calls} 次 / 失败 ${m.errors} / 平均 ${m.avgMs}ms / 最长 ${m.maxMs}ms`);
+        for (const m of s.methods) lines.push(`  ${m.method}: ${m.calls} 次 / 失败 ${m.errors} / 平均 ${m.avgMs}ms / 最长 ${m.maxMs}ms` + (m.setupMs && m.calls ? `（含宿主冷启动/排队 ${Math.round(m.setupMs / m.calls)}ms）` : ""));
       }
+      // kind 有三种：call（插件调用）、media（播放器的 Range 请求与宿主的回应）、event（运行时/插件日志）。
+      // media 事件没有 method 之外的 code 保障、也没有 level，旧写法把它当 call 打印出「undefined 调用已取消」。
       const ev = report.events.filter(e => e.plugin === st.plugin && (e.ok === false || e.level)).slice(0, 15);
-      for (const e of ev) lines.push(`  [${time(e.at)}] ${e.kind === "call" ? `${e.method} ${e.ms}ms ${e.code} ${e.message}${e.params ? " " + JSON.stringify(e.params) : ""}` : `${e.level} ${e.message}`}`);
+      for (const e of ev) lines.push(`  [${time(e.at)}] ${
+        e.kind === "call" ? `${e.method} ${e.ms}ms ${e.code} ${e.message}${e.params ? " " + JSON.stringify(e.params) : ""}`
+        : e.kind === "media" ? `媒体 ${e.method || ""}${e.range ? " " + e.range : ""} ${e.status || 0} ${e.ms}ms ${e.code || ""} ${e.message || ""}`.replace(/\s+/g, " ").trim()
+        : `${e.level} ${e.message}`}`);
     }
     const text = lines.join("\n");
     try { await navigator.clipboard.writeText(text); setCopied(all ? "已复制全部报告" : "已复制该源报告"); }
@@ -156,9 +163,11 @@ export default function DiagnosticsPage({ onBack }: { onBack: () => void }) {
       <ul className="text-[10.5px] leading-snug">
         {events.slice(0, 300).map((e, i) => <li key={i} className="px-2 py-1 border-b border-s3 flex gap-2">
           <span className="text-mut shrink-0">{time(e.at)}</span>
-          <span className="shrink-0" style={{ color: e.kind === "call" ? (e.ok ? toneColor.ok : toneColor.bad) : e.level === "error" ? toneColor.bad : toneColor.warn }}>●</span>
+          <span className="shrink-0" style={{ color: e.kind === "event" ? (e.level === "error" ? toneColor.bad : toneColor.warn) : e.ok ? toneColor.ok : toneColor.bad }}>●</span>
           <span className="min-w-0 break-all">{!focus && <b className="text-on">{e.name || nameOf.get(e.plugin) || e.plugin} </b>}
-            {e.kind === "call" ? <>{e.method} <span className="text-mut">{e.ms}ms</span>{e.ok ? "" : ` ${e.code}：${e.message}`}{e.warnings ? ` · 数据修正 ${e.warnings}` : ""}{e.params ? <span className="text-mut"> {JSON.stringify(e.params)}</span> : null}</> : <>{e.message}</>}</span>
+            {e.kind === "call" ? <>{e.method} <span className="text-mut">{e.ms}ms</span>{e.ok ? "" : ` ${e.code}：${e.message}`}{e.warnings ? ` · 数据修正 ${e.warnings}` : ""}{e.params ? <span className="text-mut"> {JSON.stringify(e.params)}</span> : null}</>
+             : e.kind === "media" ? <>媒体 {e.method}{e.range ? ` ${e.range}` : ""} <span className="text-mut">{e.status || 0} · {e.ms}ms{e.contentType ? ` · ${e.contentType}` : ""}</span>{e.ok ? "" : ` ${e.code || ""}：${e.message || ""}`}</>
+             : <>{e.message}</>}</span>
         </li>)}
       </ul>
     </div>
