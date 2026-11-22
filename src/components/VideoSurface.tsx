@@ -53,6 +53,8 @@ function ensureVideo() {
 }
 /** 当前占用者：晚到的卸载不能把已经交给新占用者的元素摘走或清空。 */
 let owner: symbol | null = null;
+/** 「被拒后借首次触摸重播」的监听是否已挂上：全局只留一对，不随被拒次数叠加。 */
+let kickArmed = false;
 
 export default forwardRef<VideoHandle, Props>(function VideoSurface(props, forwarded) {
   const ref=useRef<HTMLVideoElement|null>(null), latest=useRef(props), hls=useRef<Hls|null>(null);
@@ -67,25 +69,34 @@ export default forwardRef<VideoHandle, Props>(function VideoSurface(props, forwa
     ref.current=v;return v;
   };
   useLayoutEffect(()=>{attach();},[]);
+  /** 同一条视频的拒绝只上报一次，并记下「第几次尝试 / 距离上次成功播放多久」，
+   *  否则一次滑动里 4 个触发点连续撞墙会刷出一串一模一样的日志，看不出哪条是新的。 */
+  const refusedKey=useRef("");
+  const lastGoodAt=useRef(0);
   const play=()=>{
     const v=ref.current;
     if(!v || !latest.current.active || document.hidden)return;
     wantsPlay.current=true;
     const attempt=++playAttempt.current, sessionId=latest.current.media.sessionId;
     if(v.paused || v.readyState<3)latest.current.onWaiting();
-    void v.play().catch((error:unknown)=>{
+    void v.play().then(()=>{lastGoodAt.current=Date.now();}).catch((error:unknown)=>{
       if(attempt!==playAttempt.current || sessionId!==latest.current.media.sessionId || !latest.current.active || document.hidden)return;
       const name=(error as {name?:string})?.name;
       if(name==='AbortError')return; // Source changes and pause interrupt pending play promises.
       if(name==='NotAllowedError'){
         wantsPlay.current=false;latest.current.onPause();
-        // 自动播放被系统拒绝：记进诊断中心，才分得清是「低电量模式 / 非手势触发」还是代码问题。
-        const m=latest.current.media;
-        void pluginCommand("diagnostics.report",{plugin:m.providerId||"",level:"warn",message:`自动播放被系统拒绝(NotAllowedError)：muted=${v.muted} 页面可见=${!document.hidden} readyState=${v.readyState}`}).catch(()=>{});
-        // 兜底：用户在这页上的第一次触摸本身就是合法手势，借它把视频拉起来。
-        // 只在被拒之后才挂，且只触发一次，不改变正常路径。
-        const kick=()=>{window.removeEventListener("touchend",kick,true);window.removeEventListener("pointerup",kick,true);if(latest.current.active&&ref.current?.paused&&sessionId===latest.current.media.sessionId)play();};
-        window.addEventListener("touchend",kick,{capture:true,once:true});window.addEventListener("pointerup",kick,{capture:true,once:true});
+        const m=latest.current.media, key=m.sessionId+":"+m.version;
+        if(refusedKey.current!==key){
+          refusedKey.current=key;
+          const since=lastGoodAt.current?`${Math.round((Date.now()-lastGoodAt.current)/1000)}秒前成功播过`:"此前没有成功播过";
+          void pluginCommand("diagnostics.report",{plugin:m.providerId||"",level:"warn",message:`自动播放被系统拒绝：${since}，muted=${v.muted} readyState=${v.readyState}`}).catch(()=>{});
+        }
+        // 兜底：用户在这页上的第一次触摸本身就是合法手势，借它把视频拉起来。只在被拒之后挂，且全局只留一对。
+        if(!kickArmed){
+          kickArmed=true;
+          const kick=()=>{kickArmed=false;window.removeEventListener("touchend",kick,true);window.removeEventListener("pointerup",kick,true);if(latest.current.active&&ref.current?.paused&&sessionId===latest.current.media.sessionId)play();};
+          window.addEventListener("touchend",kick,{capture:true,once:true});window.addEventListener("pointerup",kick,{capture:true,once:true});
+        }
       }
       else latest.current.onError();
     });
@@ -143,7 +154,10 @@ export default forwardRef<VideoHandle, Props>(function VideoSurface(props, forwa
       for(const [n,f] of evs)v.removeEventListener(n,f);
       hls.current?.destroy();hls.current=null;
       // 元素已被下一个会话接管时，不能再清空它的 src，否则会把刚设好的新视频掐掉
-      if(owner===me){v.pause();v.removeAttribute("src");v.querySelectorAll("track").forEach(t=>t.remove());v.load();owner=null;}
+      // 不在这里立刻 removeAttribute/load()：load() 会把元素复位，可能连同 WebKit 记下的「已被手势播放过」一起丢掉，
+      // 而下一条紧接着就会设置自己的 src。推迟一拍：到时仍是自己占用（没人接手）才真正清空，避免后台继续加载。
+      v.pause();
+      window.setTimeout(()=>{if(owner===me){v.removeAttribute("src");v.querySelectorAll("track").forEach(t=>t.remove());v.load();owner=null;}},400);
     };
   },[props.media.sessionId,props.media.version]);
   /* 变换/适配跟着 props 走（原来是 JSX style，现在元素不归 React，手动同步） */

@@ -26,6 +26,19 @@ const health = (s?: Sum, st?: State) => {
   if (r > 0 || siteMax > 20000) return { tone: "warn", text: r > 0 ? `失败 ${s.errors}/${s.calls}` : "响应偏慢" };
   return { tone: "ok", text: "正常" };
 };
+/** 体检的 state 与日志侧 tone 对齐：播不了=bad，小问题=warn，正常=ok，跳过=idle。 */
+const checkTone = (c: CheckResult) => ({ bad: "bad", warn: "warn", ok: "ok", skip: "idle" } as const)[c.state];
+const toneRank: Record<string, number> = { bad: 0, warn: 1, ok: 2, idle: 3 };
+/** 日志与体检合成一个结论：体检亲自拉过视频流，比「没出过错」更可信，所以取更差的那个。 */
+const mergedHealth = (s?: Sum, st?: State, c?: CheckResult) => {
+  const h = health(s, st);
+  if (!c) return h;
+  const ct = checkTone(c);
+  // 没有任何调用记录（idle）时，体检就是唯一依据；这条必须先于「取更差」，否则 ok 会被当成比 idle「更差」
+  if (h.tone === "idle") return ct === "ok" ? { tone: "ok", text: "体检通过" } : ct === "idle" ? h : { tone: ct as string, text: `体检：${c.state === "bad" ? "播不了" : "有小问题"}` };
+  if (toneRank[ct] < toneRank[h.tone]) return { tone: ct as string, text: `体检：${c.state === "bad" ? "播不了" : c.state === "warn" ? "有小问题" : "已跳过"}` };
+  return h;
+};
 const toneColor: Record<string, string> = { ok: "#3ecf8e", warn: "#f5a623", bad: "#ff5f56", idle: "#7a7a85" };
 
 /** 诊断中心：汇总所有源的调用情况，出问题时一眼看到哪个源、哪个方法、什么错误，并可一键复制报告。 */
@@ -52,15 +65,16 @@ export default function DiagnosticsPage({ onBack }: { onBack: () => void }) {
   };
   useEffect(() => { void load(); const t = setInterval(() => void load(), 5000); return () => clearInterval(t); }, []);
 
+  const checkOf = useMemo(() => new Map((checks || []).map(c => [c.id, c])), [checks]);
   const rows = useMemo(() => {
     if (!report) return [];
     const sums = new Map(report.summary.map(s => [s.plugin, s]));
     return report.plugins.filter(p => p.enabled || sums.has(p.plugin)).map(st => ({ st, s: sums.get(st.plugin) }))
       .sort((a, b) => {
-        const rank = (x: typeof a) => ({ bad: 0, warn: 1, ok: 2, idle: 3 } as Record<string, number>)[health(x.s, x.st).tone];
+        const rank = (x: typeof a) => toneRank[mergedHealth(x.s, x.st, checkOf.get(x.st.plugin)).tone];
         return rank(a) - rank(b) || (b.s?.lastAt || 0) - (a.s?.lastAt || 0);
       });
-  }, [report]);
+  }, [report, checkOf]);
   const nameOf = useMemo(() => new Map((report?.plugins || []).map(p => [p.plugin, p.name])), [report]);
   const events = useMemo(() => (report?.events || []).filter(e => (!focus || e.plugin === focus) && (!onlyErrors || e.ok === false || e.level === "error" || e.level === "warn")), [report, focus, onlyErrors]);
 
@@ -73,6 +87,11 @@ export default function DiagnosticsPage({ onBack }: { onBack: () => void }) {
       lines.push(`\n## ${st.name} (${st.plugin} v${st.version}) — ${h.text}`);
       if (st.fault) lines.push(`运行时：${st.fault}`);
       if (st.error) lines.push(`加载：${st.error.code} ${st.error.message}`);
+      const chk = checkOf.get(st.plugin);
+      if (chk) {
+        lines.push(`体检 ${({ ok: "🟢通过", warn: "🟡有小问题", bad: "🔴播不了", skip: "⚪跳过" })[chk.state]} · ${(chk.ms / 1000).toFixed(1)}s${checkedAt ? " · " + time(checkedAt) : ""}`);
+        for (const x of chk.steps) lines.push(`  ${x.ok ? "✓" : "✗"} ${x.name}${x.detail ? "：" + x.detail : ""}`);
+      }
       if (s) {
         lines.push(`调用 ${s.calls} 次，失败 ${s.errors}，播放器失败 ${s.playFailures || 0}，平均 ${s.avgMs}ms，最长 ${s.maxMs}ms` + (Object.keys(s.codes).length ? `，错误码 ${Object.entries(s.codes).map(([c, n]) => `${c}×${n}`).join(" ")}` : ""));
         for (const m of s.methods) lines.push(`  ${m.method}: ${m.calls} 次 / 失败 ${m.errors} / 平均 ${m.avgMs}ms / 最长 ${m.maxMs}ms` + (m.setupMs && m.calls ? `（含宿主冷启动/排队 ${Math.round(m.setupMs / m.calls)}ms）` : ""));
@@ -90,18 +109,9 @@ export default function DiagnosticsPage({ onBack }: { onBack: () => void }) {
     catch { setCopied("复制失败：剪贴板不可用"); }
     setTimeout(() => setCopied(""), 2500);
   };
-  const copyChecks = async () => {
-    if (!checks) return;
-    const text = [`HGhub 源体检 ${new Date().toLocaleString("zh-CN", { hour12: false })}（本机网络）`,
-      ...[...checks].sort((a, b) => ({ bad: 0, warn: 1, skip: 2, ok: 3 })[a.state] - ({ bad: 0, warn: 1, skip: 2, ok: 3 })[b.state])
-        .map(c => `\n## ${({ ok: "🟢", warn: "🟡", bad: "🔴", skip: "⚪" })[c.state]} ${c.name} ${c.version} · ${(c.ms / 1000).toFixed(1)}s\n` +
-          c.steps.map(x => `  ${x.ok ? "✓" : "✗"} ${x.name}${x.detail ? "：" + x.detail : ""}`).join("\n"))].join("\n");
-    try { await navigator.clipboard.writeText(text); setCopied("已复制体检结果"); } catch { setCopied("复制失败：剪贴板不可用"); }
-    setTimeout(() => setCopied(""), 2500);
-  };
   const clear = async () => { try { await request("diagnostics.clear"); await load(); } catch (e) { setError(pluginError(e)); } };
 
-  const totals = rows.reduce((a, r) => { const t = health(r.s, r.st).tone; a[t] = (a[t] || 0) + 1; return a; }, {} as Record<string, number>);
+  const totals = rows.reduce((a, r) => { const t = mergedHealth(r.s, r.st, checkOf.get(r.st.plugin)).tone; a[t] = (a[t] || 0) + 1; return a; }, {} as Record<string, number>);
   return <div className="absolute inset-0 bg-bg flex flex-col hpp-diagnostics">
     <div className="shrink-0 bg-s1" style={{ paddingTop: "var(--sat, 0px)" }}>
       <div className="px-3 pt-2 pb-3 flex items-center gap-2">
@@ -111,8 +121,8 @@ export default function DiagnosticsPage({ onBack }: { onBack: () => void }) {
       </div>
       <div className="px-4 pb-3 flex flex-wrap gap-2 text-[11px]">
         {(["bad", "warn", "ok", "idle"] as const).map(t => <span key={t} className="px-2 py-1 rounded-full bg-s3 text-on"><i style={{ display: "inline-block", width: 7, height: 7, borderRadius: 9, background: toneColor[t], marginRight: 5 }} />{({ bad: "异常", warn: "有失败", ok: "正常", idle: "未调用" })[t]} {totals[t] || 0}</span>)}
-        <button className="px-2 py-1 rounded-full bg-s3 text-primary" onClick={() => void copy(true)}>复制全部报告</button>
-        <button className="px-2 py-1 rounded-full bg-s3 text-primary" onClick={() => void runCheck()}>{progress ? `体检中 ${progress.done}/${progress.total} 停止` : "体检全部源"}</button>
+        <button className="px-2 py-1 rounded-full bg-s3 text-primary" onClick={() => void copy(true)}>复制全部报告{checks ? "（含体检）" : ""}</button>
+        <button className="px-2 py-1 rounded-full bg-s3 text-primary" onClick={() => void runCheck()}>{progress ? `体检中 ${progress.done}/${progress.total} 停止` : checks ? "重新体检" : "体检全部源"}</button>
         <button className="px-2 py-1 rounded-full bg-s3 text-mut" onClick={() => void clear()}>清空</button>
       </div>
     </div>
@@ -120,36 +130,34 @@ export default function DiagnosticsPage({ onBack }: { onBack: () => void }) {
       {error && <p className="text-[12px] text-red-400 p-2">{error}</p>}
       {copied && <p className="text-[12px] text-primary p-2" role="status">{copied}</p>}
       <p className="text-[10.5px] text-mut px-1 py-2">自动记录所有源的每次调用（首页、分类、搜索、详情、播放…），每 5 秒刷新。参数里不记录账号密码。出问题时点「复制报告」发给开发者。</p>
-      {(progress || checks) && <div className="rounded-(--r-sm) bg-s1 mb-2 p-3">
-        <div className="flex items-center gap-2 mb-1">
-          <strong className="text-[12.5px] text-on">体检结果</strong>
-          {progress && <span className="text-[10.5px] text-mut">正在检查 {progress.current}（{progress.done}/{progress.total}）</span>}
-          {checks && !progress && <span className="text-[10.5px] text-mut">{checkedAt ? time(checkedAt) + " · " : ""}{checks.filter(c => c.state === "ok").length} 正常 · {checks.filter(c => c.state === "warn").length} 有小问题 · {checks.filter(c => c.state === "bad").length} 播不了</span>}
-        </div>
-        {progress && progress.total > 0 && <div style={{ height: 3, background: "var(--p-s3)", borderRadius: 9, overflow: "hidden", marginBottom: 8 }}>
-          <div style={{ width: `${Math.round(progress.done / progress.total * 100)}%`, height: "100%", background: toneColor.ok, transition: "width .3s" }} />
+      {(progress || checks) && <div className="rounded-(--r-sm) bg-s1 mb-2 px-3 py-2.5">
+        {progress && <>
+          <div className="text-[11.5px] text-mut mb-1.5">正在体检 <b className="text-on">{progress.current}</b>（{progress.done}/{progress.total}）</div>
+          {progress.total > 0 && <div style={{ height: 3, background: "var(--p-s3)", borderRadius: 9, overflow: "hidden" }}>
+            <div style={{ width: `${Math.round(progress.done / progress.total * 100)}%`, height: "100%", background: toneColor.ok, transition: "width .3s" }} />
+          </div>}
+        </>}
+        {checks && !progress && <div className="text-[11.5px] text-mut">
+          上次体检 {checkedAt ? time(checkedAt) : ""} · <b style={{ color: toneColor.ok }}>{checks.filter(c => c.state === "ok").length} 正常</b> · <b style={{ color: toneColor.warn }}>{checks.filter(c => c.state === "warn").length} 小问题</b> · <b style={{ color: toneColor.bad }}>{checks.filter(c => c.state === "bad").length} 播不了</b>
+          <span className="block text-[10.5px] mt-0.5">结果已并进下面每个源的卡片，展开即可看到每一步</span>
         </div>}
-        {checks && [...checks].sort((a, b) => ({ bad: 0, warn: 1, skip: 2, ok: 3 })[a.state] - ({ bad: 0, warn: 1, skip: 2, ok: 3 })[b.state]).map(c => (
-          <div key={c.id} className="flex gap-2 py-1 text-[11px] border-b border-s3 last:border-0">
-            <i style={{ width: 8, height: 8, borderRadius: 9, marginTop: 4, flexShrink: 0, background: c.state === "ok" ? toneColor.ok : c.state === "warn" ? toneColor.warn : c.state === "bad" ? toneColor.bad : toneColor.idle }} />
-            <span className="flex-1 min-w-0"><b className="text-on">{c.name}</b> <span className="text-mut">{c.steps.map(x => (x.ok ? "" : "✗") + x.name + (x.detail ? " " + x.detail : "")).join(" · ")}</span></span>
-            <span className="text-mut shrink-0">{(c.ms / 1000).toFixed(1)}s</span>
-          </div>
-        ))}
-        {checks && !progress && <button className="mt-2 px-2 py-1 rounded-full bg-s3 text-primary text-[11px]" onClick={() => void copyChecks()}>复制体检结果</button>}
       </div>}
 
       {rows.map(({ st, s }) => {
-        const h = health(s, st), open = focus === st.plugin;
+        const chk = checkOf.get(st.plugin), h = mergedHealth(s, st, chk), open = focus === st.plugin;
         return <div key={st.plugin} className="rounded-(--r-sm) bg-s1 mb-2 overflow-hidden">
           <button className="w-full text-left px-3 py-2.5 flex items-center gap-2.5" onClick={() => setFocus(open ? null : st.plugin)}>
             <i style={{ width: 9, height: 9, borderRadius: 9, background: toneColor[h.tone], flexShrink: 0 }} />
             <span className="flex-1 min-w-0"><span className="block text-[13px] text-on truncate">{st.name} <small className="text-mut">v{st.version}</small></span>
-              <span className="block text-[10.5px] text-mut truncate">{h.text}{s ? ` · ${s.calls} 次 · 平均 ${s.avgMs}ms` : ""}{s?.lastError ? ` · 最近错误 ${s.lastError.method}：${s.lastError.message}` : ""}</span></span>
+              <span className="block text-[10.5px] text-mut truncate">{h.text}{s ? ` · ${s.calls} 次 · 平均 ${s.avgMs}ms` : ""}{chk && h.text.indexOf("体检") < 0 ? ` · 体检${chk.state === "ok" ? "通过" : chk.state === "warn" ? "有小问题" : chk.state === "bad" ? "播不了" : "跳过"}` : ""}{s?.lastError ? ` · 最近错误 ${s.lastError.method}：${s.lastError.message}` : ""}</span></span>
           </button>
           {open && <div className="px-3 pb-3 text-[11px] text-on">
             {st.fault && <p className="text-red-400 mb-1">运行时：{st.fault}</p>}
             {st.error && <p className="text-red-400 mb-1">加载：{st.error.code} {st.error.message}</p>}
+            {chk && <div className="mb-2 rounded bg-s3 px-2 py-1.5">
+              <p className="text-mut mb-1">体检 · {(chk.ms / 1000).toFixed(1)}s{checkedAt ? " · " + time(checkedAt) : ""}</p>
+              {chk.steps.map((x, i) => <p key={i} style={{ color: x.ok ? undefined : toneColor.bad }}>{x.ok ? "✓" : "✗"} {x.name}{x.detail ? <span className="text-mut">：{x.detail}</span> : null}</p>)}
+            </div>}
             {s && <table className="w-full mb-2" style={{ borderCollapse: "collapse" }}><thead><tr className="text-mut"><th className="text-left font-normal">方法</th><th className="font-normal">次数</th><th className="font-normal">失败</th><th className="font-normal">平均</th><th className="font-normal">最长</th></tr></thead>
               <tbody>{s.methods.map(m => <tr key={m.method}><td className="py-0.5">{m.method}</td><td className="text-center">{m.calls}</td><td className="text-center" style={{ color: m.errors ? toneColor.bad : undefined }}>{m.errors}</td><td className="text-center">{m.avgMs}ms</td><td className="text-center">{m.maxMs}ms</td></tr>)}</tbody></table>}
             {s && !!Object.keys(s.codes).length && <p className="text-mut mb-2">错误码：{Object.entries(s.codes).map(([c, n]) => `${c} × ${n}`).join("，")}</p>}
