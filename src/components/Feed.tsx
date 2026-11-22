@@ -18,6 +18,10 @@ export type PlayerPanel = "detail" | "episodes" | "comments" | "playback";
 type SurfacePanel = PlayerPanel | "more";
 export interface FeedPresentation {
   playIntent?: number; mode?: "preview" | "full"; onOpenDetail?: () => void;
+  /** 推荐流里标出这条内容来自哪个片源（author 可能是站点作者名，不足以分辨来源）。 */
+  sourceName?: string;
+  /** 点片源徽章时打开片源选择，省得每次都绕进设置页。 */
+  onPickSources?: () => void;
   title?: string; author?: string; description?: string; score?: number; poster?: string;
   episodeLabel?: string; qualityLabel?: string; episodeCount?: number; favorite?: boolean; onFavorite?: () => void;
   panels?: Partial<Record<PlayerPanel, ReactNode>>; social?: ReactNode;
@@ -35,7 +39,7 @@ export interface FeedProps extends FeedPresentation {
 /** Restored from 5f88442 Feed: shared desktop chrome and mobile gestures.
  * Plugin adapters own metadata, sessions and persistence; this component owns presentation. */
 export default function Feed({media, position, active=true, preparing=false, error="", onRetry, onPosition, onFailure, onPlaying, onStopped, onEnded, onBuffer, onWaiting,
- title="", author="", description="", score, poster:posterUrl, episodeLabel="", qualityLabel, episodeCount=0, favorite=false, onFavorite,
+ title="", author="", description="", score, poster:posterUrl, episodeLabel="", qualityLabel, episodeCount=0, favorite=false, onFavorite, sourceName="", onPickSources,
  playIntent=0, mode="full", onOpenDetail, panels={}, social, onPanelChange, onBack, onNext, onPrevious, onNextEpisode, onPreviousEpisode, queueIndex=0, total=1, previousPreview, nextPreview}: FeedProps) {
   const store=useStore(), {muted,setMuted,volume,setVolume}=store;
   const activeRef = useRef(active); activeRef.current = active;
@@ -69,6 +73,9 @@ export default function Feed({media, position, active=true, preparing=false, err
     // 完整播放页仍沿用「离开前在播才恢复」，免得用户特意暂停后回来又自己动了。
     else if (resumeAfterOverlay.current || preview) { resumeAfterOverlay.current = false; videoRef.current?.play(); }
   }, [active]);
+  /* 滑到新卡片时播放地址往往还在解析中（active 早就是 true，media 稍后才到）。
+     只盯 active 会漏掉这批：解析慢的那几条滑到了也不播。拿到新 media 后再补一次。 */
+  useEffect(() => { if (preview && active && playUrl) videoRef.current?.play(); }, [preview, active, playKey]);
   useEffect(() => { if (playIntent && active) videoRef.current?.play(); }, [playIntent]);
   useEffect(() => { setPanel(null); if (active) store.setClean(false); wake(); }, [mode]);
   /* 续播：拿到时长后再 seek 一次（只对进入时那一条生效） */
@@ -799,7 +806,7 @@ export default function Feed({media, position, active=true, preparing=false, err
                   {onFavorite&&<button onClick={onFavorite} aria-label={favorite?"取消本地收藏":"本地收藏"} aria-pressed={favorite}><span>{favorite?<IHeartF size={25}/>:<IHeart size={25}/>}</span><small>{favorite?"已收藏":"收藏"}</small></button>}
                   <button aria-label="作品详情" onClick={showDetails}><span className="hg-info-glyph">ⓘ</span><small>详情</small></button>
                 </div>
-                <div className="hg-preview-copy"><h1>{title}</h1><div className="hg-preview-meta"><span>{author}</span>{score!==undefined&&<strong>评分 {score.toFixed(1)}</strong>}</div><button onClick={showDetails} className="hg-preview-synopsis"><span>{description || "发现下一部值得看的故事"}</span><b>展开</b></button></div>
+                <div className="hg-preview-copy"><h1>{title}</h1><div className="hg-preview-meta">{sourceName&&(onPickSources?<button type="button" className="hg-preview-badge" onClick={onPickSources} aria-label={`片源 ${sourceName}，点按选择在推荐流里显示的片源`}>{sourceName}</button>:<b className="hg-preview-badge">{sourceName}</b>)}<span>{author}</span>{score!==undefined&&<strong>评分 {score.toFixed(1)}</strong>}</div><button onClick={showDetails} className="hg-preview-synopsis"><span>{description || "发现下一部值得看的故事"}</span><b>展开</b></button></div>
                 <div className="hg-preview-footer"><button className="hg-preview-watch" onClick={showDetails} aria-label={`观看完整作品${episodeCount ? `，共 ${episodeCount} 集` : ""}`}><IPlayF size={17}/>{episodeCount ? <em>{episodeCount}</em> : null}</button></div>
                 <div className="hg-preview-scrub">
                   <input aria-label="预览进度" type="range" min={0} max={duration||1} step=".1" disabled={!duration} value={Math.min(time,duration||1)} onChange={e=>{videoRef.current?.seek(Number(e.target.value));setTime(Number(e.target.value));}} style={{"--progress":`${barProgress*100}%`} as React.CSSProperties}/>

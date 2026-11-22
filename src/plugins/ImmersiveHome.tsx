@@ -29,6 +29,7 @@ export default function ImmersiveHome({ open, manage, settings, active = true }:
   const [errors, setErrors] = useState<Record<string, string>>({}), [round, setRound] = useState(0);
   const pages = useRef(new Map<string, SourcePage>()), generation = useRef(0), loading = useRef(false), ids = useRef(new Set<string>());
   const [more, setMore] = useState(false);
+  const [picker, setPicker] = useState(false);
   const load = async (advance = false) => {
     if (loading.current) return;
     loading.current = true; setBusy(true);
@@ -98,9 +99,10 @@ export default function ImmersiveHome({ open, manage, settings, active = true }:
     return () => clearTimeout(timer);
   }, [active, after?.plugin.meta.id, after?.plugin.revision, after?.item.id]);
   return <div className="legacy-home">
-    {current ? <PluginMediaDetail key={JSON.stringify([current.plugin.meta.id,current.plugin.revision,current.item.id])} active={active} plugin={current.plugin} mediaId={current.item.id} entryEpisodeId={current.item.entryEpisodeId} entryItem={current.item} manage={manage} onSwitch={(pluginId,mediaId,start)=>app.push({kind:"media",pluginId,mediaId,start})} presentation={{mode:"preview",title:current.item.title,queueIndex:index,total:queue.length,onNext:index+1<queue.length||more?next:undefined,onPrevious:index?previous:undefined,nextPreview:after?{title:after.item.title,poster:afterPoster}:undefined,previousPreview:before?{title:before.item.title,poster:beforePoster}:undefined}}/>
+    {current ? <PluginMediaDetail key={JSON.stringify([current.plugin.meta.id,current.plugin.revision,current.item.id])} active={active} plugin={current.plugin} mediaId={current.item.id} entryEpisodeId={current.item.entryEpisodeId} entryItem={current.item} manage={manage} onSwitch={(pluginId,mediaId,start)=>app.push({kind:"media",pluginId,mediaId,start})} presentation={{mode:"preview",title:current.item.title,queueIndex:index,total:queue.length,onNext:index+1<queue.length||more?next:undefined,onPrevious:index?previous:undefined,nextPreview:after?{title:after.item.title,poster:afterPoster}:undefined,previousPreview:before?{title:before.item.title,poster:beforePoster}:undefined,onPickSources:()=>setPicker(true)}}/>
       : <div className="absolute inset-0 bg-black flex flex-col items-center justify-center gap-4 text-white/60 text-xs"><Logo size={42}/><p>{busy?"正在加载…":available.length?"暂无可播放内容":"添加片源后开始观看"}</p>{!busy&&<button className="rounded-full px-5 py-2 bg-white/10" onClick={available.length?settings:manage}>{available.length?"选择片源":"添加片源"}</button>}</div>}
     {!!Object.keys(errors).length&&<details className="hpp-home-errors"><summary>{Object.keys(errors).length} 个片源暂不可用</summary>{Object.values(errors).map(e=><Notice key={e} error={e}/>)}<button onClick={()=>void load()}>重试片源</button></details>}
+    {picker&&<SourcePicker plugins={available} close={()=>setPicker(false)} manage={manage}/>}
   </div>;
 }
 

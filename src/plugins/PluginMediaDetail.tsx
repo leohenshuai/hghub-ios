@@ -383,7 +383,7 @@ export default function PluginMediaDetail({ plugin, mediaId, onBack, manage, act
       previousPreview={fullPlayback ? previousEpisode ? {title:previousEpisode.label || '上一集',poster} : undefined : presentation.previousPreview}
       nextPreview={fullPlayback ? nextEpisode ? {title:nextEpisode.label || '下一集',poster} : undefined : presentation.nextPreview}
       onPanelChange={panel=>{if(panel==='detail'||panel==='episodes')setNeedsDetail(true);}}
-      title={detail?.title||entryItem?.title||presentation.title} author={detail?.author?.name||plugin.meta.name} description={detail?.description||entryItem?.description} score={detail?.score??entryItem?.score} poster={poster}
+      title={detail?.title||entryItem?.title||presentation.title} author={detail?.author?.name||plugin.meta.name} sourceName={plugin.meta.name} description={detail?.description||entryItem?.description} score={detail?.score??entryItem?.score} poster={poster}
       qualityLabel={(choices?.resolver || choices?.source)?.streams.find(s=>s.index===(choices?.resolver || choices?.source)?.streamIndex)?.label}
       episodeLabel={episode?.label||String(episode?.episodeNumber??episode?.index??1)} episodeCount={detail?.episodeCount||entryItem?.episodeCount||currentList?.episodes.length}
       social={detail&&active?<MediaInteractions compact plugin={plugin} detail={detail}/>:undefined}
