@@ -1,4 +1,4 @@
-import { forwardRef, useEffect, useImperativeHandle, useLayoutEffect, useRef } from "react";
+import { forwardRef, useEffect, useImperativeHandle, useRef } from "react";
 import Hls from "hls.js";
 import workerPath from 'hls.js/dist/hls.worker.js?url';
 import { hlsPlaybackPath } from '../plugins/mediaCapabilities';
@@ -35,69 +35,21 @@ function reportMediaError(v: HTMLVideoElement, media: { format?: string; provide
   const text = `播放器错误 MEDIA_ERR_${name}(${code})，${where}格式 ${media.format ?? "?"}，${err?.message ? err.message.slice(0, 160) : "无详情"}`;
   void pluginCommand("diagnostics.report", { plugin, level: "error", message: text }).catch(() => {});
 }
-/** 全局只有一个 <video>。
- *  iOS 低电量模式会禁止脚本自动起播（连静音的也不例外），但对「已经被用户手势播放过」的元素，
- *  之后改 src 再 play() 一般放行。推荐流每滑一条都新建一个 <video>，等于每条都要重新申请授权，
- *  于是在低电量下每条都停在播放钮上。改成整个应用共用一个元素，只换 src。
- *  元素由本模块创建并在每次挂载时搬进当前容器；React 不再管理它，所以事件要自己绑。 */
-let sharedVideo: HTMLVideoElement | null = null;
-function ensureVideo() {
-  if (!sharedVideo) {
-    const v = document.createElement("video");
-    v.playsInline = true; v.preload = "auto"; v.crossOrigin = "anonymous";
-    v.setAttribute("playsinline", ""); v.setAttribute("webkit-playsinline", "");
-    v.className = "w-full h-full";
-    sharedVideo = v;
-  }
-  return sharedVideo;
-}
-/** 当前占用者：晚到的卸载不能把已经交给新占用者的元素摘走或清空。 */
-let owner: symbol | null = null;
-/** 「被拒后借首次触摸重播」的监听是否已挂上：全局只留一对，不随被拒次数叠加。 */
-let kickArmed = false;
-
 export default forwardRef<VideoHandle, Props>(function VideoSurface(props, forwarded) {
-  const ref=useRef<HTMLVideoElement|null>(null), latest=useRef(props), hls=useRef<Hls|null>(null);
-  const hostRef=useRef<HTMLDivElement>(null);
+  const ref=useRef<HTMLVideoElement>(null), latest=useRef(props), hls=useRef<Hls|null>(null);
   const playAttempt=useRef(0), wantsPlay=useRef(props.autoPlay!==false);
   latest.current=props;
-  // 先于所有 effect：保证 ref 在第一个 effect 里就有值
-  const attach=()=>{
-    const host=hostRef.current;if(!host)return null;
-    const v=ensureVideo();
-    if(v.parentNode!==host)host.appendChild(v);
-    ref.current=v;return v;
-  };
-  useLayoutEffect(()=>{attach();},[]);
-  /** 同一条视频的拒绝只上报一次，并记下「第几次尝试 / 距离上次成功播放多久」，
-   *  否则一次滑动里 4 个触发点连续撞墙会刷出一串一模一样的日志，看不出哪条是新的。 */
-  const refusedKey=useRef("");
-  const lastGoodAt=useRef(0);
   const play=()=>{
     const v=ref.current;
     if(!v || !latest.current.active || document.hidden)return;
     wantsPlay.current=true;
     const attempt=++playAttempt.current, sessionId=latest.current.media.sessionId;
     if(v.paused || v.readyState<3)latest.current.onWaiting();
-    void v.play().then(()=>{lastGoodAt.current=Date.now();}).catch((error:unknown)=>{
+    void v.play().catch((error:unknown)=>{
       if(attempt!==playAttempt.current || sessionId!==latest.current.media.sessionId || !latest.current.active || document.hidden)return;
       const name=(error as {name?:string})?.name;
       if(name==='AbortError')return; // Source changes and pause interrupt pending play promises.
-      if(name==='NotAllowedError'){
-        wantsPlay.current=false;latest.current.onPause();
-        const m=latest.current.media, key=m.sessionId+":"+m.version;
-        if(refusedKey.current!==key){
-          refusedKey.current=key;
-          const since=lastGoodAt.current?`${Math.round((Date.now()-lastGoodAt.current)/1000)}秒前成功播过`:"此前没有成功播过";
-          void pluginCommand("diagnostics.report",{plugin:m.providerId||"",level:"warn",message:`自动播放被系统拒绝：${since}，muted=${v.muted} readyState=${v.readyState}`}).catch(()=>{});
-        }
-        // 兜底：用户在这页上的第一次触摸本身就是合法手势，借它把视频拉起来。只在被拒之后挂，且全局只留一对。
-        if(!kickArmed){
-          kickArmed=true;
-          const kick=()=>{kickArmed=false;window.removeEventListener("touchend",kick,true);window.removeEventListener("pointerup",kick,true);if(latest.current.active&&ref.current?.paused&&sessionId===latest.current.media.sessionId)play();};
-          window.addEventListener("touchend",kick,{capture:true,once:true});window.addEventListener("pointerup",kick,{capture:true,once:true});
-        }
-      }
+      if(name==='NotAllowedError'){wantsPlay.current=false;latest.current.onPause();}
       else latest.current.onError();
     });
   };
@@ -109,8 +61,7 @@ export default forwardRef<VideoHandle, Props>(function VideoSurface(props, forwa
     rate:r=>{if(ref.current)ref.current.playbackRate=r;},mute:m=>{if(ref.current)ref.current.muted=m;},volume:n=>{if(ref.current)ref.current.volume=n;},
   }),[]);
   useEffect(()=>{
-    const v=attach()!;let disposed=false,failed=false,resume=false;
-    const me=Symbol("surface");owner=me;
+    const v=ref.current!;let disposed=false,failed=false,resume=false;
     playAttempt.current++;wantsPlay.current=latest.current.autoPlay!==false;
     const started=performance.now(); let firstFrame: number | undefined;
     const p=latest.current;
@@ -120,24 +71,7 @@ export default forwardRef<VideoHandle, Props>(function VideoSurface(props, forwa
     const playing=()=>{if(!disposed){activity(true);latest.current.onPlaying();}};
     const paused=()=>{if(!disposed&&v.paused){activity(false);latest.current.onTime(v.currentTime);if(!v.ended){if(wantsPlay.current&&latest.current.active&&v.readyState<3)latest.current.onWaiting();else latest.current.onPause();}}};
     const visibility=()=>{if(document.hidden){resume=!v.paused;v.pause();hls.current?.stopLoad();}else if(resume){resume=false;if(latest.current.active){hls.current?.startLoad(v.currentTime);play();}}};
-    // 原来由 JSX 上的 onXxx 绑定；元素现在是共享的、不归 React 管，改成随会话挂载/摘除的原生监听
-    const dimensions=()=>{if(Number.isFinite(v.duration))latest.current.onDuration(v.duration);if(v.videoWidth)latest.current.onSize(v.videoWidth,v.videoHeight);};
-    const timeupdate=()=>{latest.current.onTime(v.currentTime);buffered(v);};
-    const onPlayEv=()=>{if(!v.paused){wantsPlay.current=true;latest.current.onWaiting();}};
-    const onWaitingEv=()=>{if(!v.paused)latest.current.onWaiting();};
-    const onSeekedEv=()=>{if(!v.paused&&v.readyState>=3)latest.current.onPlaying();};
-    const onEndedEv=()=>latest.current.onEnded?.();
-    const onProgressEv=()=>buffered(v);
-    const evs:[string,EventListener][]=[["loadedmetadata",dimensions],["loadeddata",dimensions],["timeupdate",timeupdate],["progress",onProgressEv],["play",onPlayEv],["waiting",onWaitingEv],["seeking",onWaitingEv],["seeked",onSeekedEv],["ended",onEndedEv]];
-    for(const [n,f] of evs)v.addEventListener(n,f);
     v.muted=p.muted;v.volume=p.volume;v.playbackRate=p.rate;
-    v.autoplay=!!(p.autoPlay&&p.active);
-    // 上一条留下的字幕轨/海报要先清；字幕随 media 变
-    v.querySelectorAll("track").forEach(t=>t.remove());
-    for(const [i,t] of (p.media.playback.subtitles||[]).filter(t=>t.format==="vtt").entries()){
-      const tr=document.createElement("track");tr.kind="subtitles";tr.src=t.url;tr.label=t.label||t.language||`字幕 ${i+1}`;if(t.language)tr.srclang=t.language;tr.default=!!t.default;v.appendChild(tr);
-    }
-    if(p.poster)v.poster=p.poster;else v.removeAttribute("poster");
     v.addEventListener("loadedmetadata",metadata);v.addEventListener("error",fail);v.addEventListener("playing",playing);v.addEventListener("pause",paused);document.addEventListener("visibilitychange",visibility);
     if(p.media.format==="hls"&&hlsPlaybackPath(v)==="mse"){
       const engine=new Hls({enableWorker:true,workerPath,autoStartLoad:p.active&&!document.hidden,startPosition:Math.max(0,p.position),backBufferLength:30,interstitialsController:undefined,contentSteeringController:undefined,enableInterstitialPlayback:false});
@@ -148,22 +82,21 @@ export default forwardRef<VideoHandle, Props>(function VideoSurface(props, forwa
     if(v.requestVideoFrameCallback)firstFrame=v.requestVideoFrameCallback(()=>{if(!disposed){playbackTiming(p.media.sessionId,'first-frame',started);if(p.media.requestedAt!==undefined)playbackTiming(p.media.sessionId,'intent-to-first-frame',p.media.requestedAt);}});
     const expiry=p.media.playback.expiresAt;
     const timer=expiry?window.setTimeout(fail,Math.max(1000,Math.min(2_147_483_647,expiry-Date.now()-5000))):undefined;
-    return()=>{
-      disposed=true;playAttempt.current++;if(firstFrame!==undefined)v.cancelVideoFrameCallback(firstFrame);clearTimeout(timer);activity(false);
-      document.removeEventListener("visibilitychange",visibility);v.removeEventListener("loadedmetadata",metadata);v.removeEventListener("error",fail);v.removeEventListener("playing",playing);v.removeEventListener("pause",paused);
-      for(const [n,f] of evs)v.removeEventListener(n,f);
-      hls.current?.destroy();hls.current=null;
-      // 元素已被下一个会话接管时，不能再清空它的 src，否则会把刚设好的新视频掐掉
-      // 不在这里立刻 removeAttribute/load()：load() 会把元素复位，可能连同 WebKit 记下的「已被手势播放过」一起丢掉，
-      // 而下一条紧接着就会设置自己的 src。推迟一拍：到时仍是自己占用（没人接手）才真正清空，避免后台继续加载。
-      v.pause();
-      window.setTimeout(()=>{if(owner===me){v.removeAttribute("src");v.querySelectorAll("track").forEach(t=>t.remove());v.load();owner=null;}},400);
-    };
+    return()=>{disposed=true;playAttempt.current++;if(firstFrame!==undefined)v.cancelVideoFrameCallback(firstFrame);clearTimeout(timer);activity(false);document.removeEventListener("visibilitychange",visibility);v.removeEventListener("loadedmetadata",metadata);v.removeEventListener("error",fail);v.removeEventListener("playing",playing);v.removeEventListener("pause",paused);hls.current?.destroy();hls.current=null;v.pause();v.removeAttribute("src");v.load();};
   },[props.media.sessionId,props.media.version]);
-  /* 变换/适配跟着 props 走（原来是 JSX style，现在元素不归 React，手动同步） */
-  useEffect(()=>{const v=ref.current;if(!v)return;v.style.objectFit=props.fit;v.style.transform=`translate(${props.panX}px, ${props.panY}px) scale(${props.scale})`;v.style.transition=props.isGesturing?"none":"transform .18s ease";},[props.fit,props.panX,props.panY,props.scale,props.isGesturing]);
   useEffect(()=>{const v=ref.current;if(v){v.muted=props.muted;v.volume=props.volume;v.playbackRate=props.rate;}},[props.muted,props.volume,props.rate]);
   useEffect(()=>{if(!props.active||document.hidden){ref.current?.pause();hls.current?.stopLoad();}else if(hls.current)hls.current.startLoad(ref.current?.currentTime||props.position);},[props.active,props.media.sessionId,props.media.version]);
-  const buffered=(v:HTMLVideoElement)=>{const f=latest.current;f.onBuffered(v.duration&&v.buffered.length?v.buffered.end(v.buffered.length-1)/v.duration:0);let ahead=0;for(let i=0;i<v.buffered.length;i++)if(v.buffered.start(i)<=v.currentTime+.1&&v.buffered.end(i)>v.currentTime)ahead=v.buffered.end(i)-v.currentTime;f.onBuffer?.(ahead);};
-  return <div ref={hostRef} className="absolute inset-0 overflow-hidden" onClick={props.onClick}/>;
+  const dimensions=()=>{const v=ref.current!;if(Number.isFinite(v.duration))latest.current.onDuration(v.duration);if(v.videoWidth)latest.current.onSize(v.videoWidth,v.videoHeight);};
+  const buffered=(v:HTMLVideoElement)=>{props.onBuffered(v.duration&&v.buffered.length?v.buffered.end(v.buffered.length-1)/v.duration:0);let ahead=0;for(let i=0;i<v.buffered.length;i++)if(v.buffered.start(i)<=v.currentTime+.1&&v.buffered.end(i)>v.currentTime)ahead=v.buffered.end(i)-v.currentTime;props.onBuffer?.(ahead);};
+  return <div className="absolute inset-0 overflow-hidden" onClick={props.onClick}>
+    <video ref={ref} playsInline preload="auto" autoPlay={props.autoPlay && props.active} crossOrigin="anonymous" poster={props.poster} className="w-full h-full"
+      style={{objectFit:props.fit,transform:`translate(${props.panX}px, ${props.panY}px) scale(${props.scale})`,transition:props.isGesturing?"none":"transform .18s ease"}}
+      onLoadedMetadata={dimensions} onLoadedData={dimensions} onTimeUpdate={e=>{props.onTime(e.currentTarget.currentTime);buffered(e.currentTarget);}}
+      onProgress={e=>buffered(e.currentTarget)}
+      onPlay={()=>{if(!ref.current?.paused){wantsPlay.current=true;props.onWaiting();}}}
+      onWaiting={()=>{if(!ref.current?.paused)props.onWaiting();}} onSeeking={()=>{if(!ref.current?.paused)props.onWaiting();}} onSeeked={()=>{const v=ref.current;if(v&&!v.paused&&v.readyState>=3)props.onPlaying();}}
+      onEnded={props.onEnded}>
+      {props.media.playback.subtitles?.filter(t=>t.format==="vtt").map((t,i)=><track key={t.url} kind="subtitles" src={t.url} label={t.label||t.language||`字幕 ${i+1}`} srcLang={t.language} default={t.default}/>)}
+    </video>
+  </div>;
 });
