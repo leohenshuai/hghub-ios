@@ -379,7 +379,7 @@ export default function PluginMediaDetail({ plugin, mediaId, onBack, manage, act
   return <div className={`legacy-media-page ${fullPlayback ? "hg-watching" : homePreview ? "hg-discovering" : "hg-detail-entry"}`}>
     {active && !busy && choices?.external && <div className="absolute inset-x-4 top-4 z-50"><ExternalPlayback key={choices.external.url} target={choices.external}/></div>}
     {playbackRequested &&
-    <PluginPlayer {...presentation} playIntent={playIntent} mode={fullPlayback ? "full" : "preview"} onOpenDetail={openDetail} onWatchFull={beginPlayback} media={canPlay?media:null} preparing={busy && (transitioning.current || !media)} active={active && !detailOpen && !transitioning.current} position={position.current} error={error} onRetry={refresh}
+    <PluginPlayer {...presentation} playIntent={playIntent} mode={fullPlayback ? "full" : "preview"} onOpenDetail={openDetail} media={canPlay?media:null} preparing={busy && (transitioning.current || !media)} active={active && !detailOpen && !transitioning.current} position={position.current} error={error} onRetry={refresh}
       previousPreview={fullPlayback ? previousEpisode ? {title:previousEpisode.label || '上一集',poster} : undefined : presentation.previousPreview}
       nextPreview={fullPlayback ? nextEpisode ? {title:nextEpisode.label || '下一集',poster} : undefined : presentation.nextPreview}
       onPanelChange={panel=>{if(panel==='detail'||panel==='episodes')setNeedsDetail(true);}}

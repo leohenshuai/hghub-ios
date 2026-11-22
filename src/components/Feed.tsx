@@ -18,8 +18,6 @@ export type PlayerPanel = "detail" | "episodes" | "comments" | "playback";
 type SurfacePanel = PlayerPanel | "more";
 export interface FeedPresentation {
   playIntent?: number; mode?: "preview" | "full"; onOpenDetail?: () => void;
-  /** 预览流底部胶囊：直接进入完整播放（不经过详情面板）。缺省时回落到 onOpenDetail。 */
-  onWatchFull?: () => void;
   title?: string; author?: string; description?: string; score?: number; poster?: string;
   episodeLabel?: string; qualityLabel?: string; episodeCount?: number; favorite?: boolean; onFavorite?: () => void;
   panels?: Partial<Record<PlayerPanel, ReactNode>>; social?: ReactNode;
@@ -38,7 +36,7 @@ export interface FeedProps extends FeedPresentation {
  * Plugin adapters own metadata, sessions and persistence; this component owns presentation. */
 export default function Feed({media, position, active=true, preparing=false, error="", onRetry, onPosition, onFailure, onPlaying, onStopped, onEnded, onBuffer, onWaiting,
  title="", author="", description="", score, poster:posterUrl, episodeLabel="", qualityLabel, episodeCount=0, favorite=false, onFavorite,
- playIntent=0, mode="full", onOpenDetail, onWatchFull, panels={}, social, onPanelChange, onBack, onNext, onPrevious, onNextEpisode, onPreviousEpisode, queueIndex=0, total=1, previousPreview, nextPreview}: FeedProps) {
+ playIntent=0, mode="full", onOpenDetail, panels={}, social, onPanelChange, onBack, onNext, onPrevious, onNextEpisode, onPreviousEpisode, queueIndex=0, total=1, previousPreview, nextPreview}: FeedProps) {
   const store=useStore(), {muted,setMuted,volume,setVolume}=store;
   const activeRef = useRef(active); activeRef.current = active;
   const isDesktop=!isMobile, preview=mode==="preview";
@@ -237,8 +235,6 @@ export default function Feed({media, position, active=true, preparing=false, err
     };window.addEventListener("keydown",key);return()=>window.removeEventListener("keydown",key);
   },[active,controlsLocked,panel,time,onNext,onPrevious,fs,preview,onNextEpisode,onPreviousEpisode]);
   const showDetails = () => { if (!isDesktop && fs) { setPanel('detail'); return; } setPanel(null); if (onOpenDetail) onOpenDetail(); else setPanel("detail"); };
-  /** 底部胶囊：直接开播，不再先弹详情面板（抖音式）。没给 onWatchFull 时退回原行为。 */
-  const watchFull = () => { if (onWatchFull) { setPanel(null); onWatchFull(); } else showDetails(); };
   const panelContent=panel && <><header className="legacy-panel-heading"><h2>{{detail:"作品详情",episodes:"选集",comments:"评论",playback:"画质与线路",more:"更多播放选项"}[panel]}</h2><button aria-label="关闭面板" onClick={()=>setPanel(null)}><IClose size={18}/></button></header><div className="legacy-panel-body">
     {panel === "more" ? <div className="hg-more-menu">
       <div className="hg-more-shortcuts">
@@ -804,7 +800,7 @@ export default function Feed({media, position, active=true, preparing=false, err
                   <button aria-label="作品详情" onClick={showDetails}><span className="hg-info-glyph">ⓘ</span><small>详情</small></button>
                 </div>
                 <div className="hg-preview-copy"><h1>{title}</h1><div className="hg-preview-meta"><span>{author}</span>{score!==undefined&&<strong>评分 {score.toFixed(1)}</strong>}</div><button onClick={showDetails} className="hg-preview-synopsis"><span>{description || "发现下一部值得看的故事"}</span><b>展开</b></button></div>
-                <div className="hg-preview-footer"><button className="hg-preview-watch" onClick={watchFull} aria-label={`观看完整作品${episodeCount ? `，共 ${episodeCount} 集` : ""}`}><IPlayF size={17}/>{episodeCount ? <em>{episodeCount}</em> : null}</button></div>
+                <div className="hg-preview-footer"><button className="hg-preview-watch" onClick={showDetails} aria-label={`观看完整作品${episodeCount ? `，共 ${episodeCount} 集` : ""}`}><IPlayF size={17}/>{episodeCount ? <em>{episodeCount}</em> : null}</button></div>
                 <div className="hg-preview-scrub">
                   <input aria-label="预览进度" type="range" min={0} max={duration||1} step=".1" disabled={!duration} value={Math.min(time,duration||1)} onChange={e=>{videoRef.current?.seek(Number(e.target.value));setTime(Number(e.target.value));}} style={{"--progress":`${barProgress*100}%`} as React.CSSProperties}/>
                 </div>
