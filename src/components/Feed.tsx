@@ -44,6 +44,9 @@ export default function Feed({media, position, active=true, preparing=false, err
   const store=useStore(), {muted,setMuted,volume,setVolume}=store;
   const activeRef = useRef(active); activeRef.current = active;
   const isDesktop=!isMobile, preview=mode==="preview";
+  /* 作者名缺失时上层会回落成片源名，徽章和作者就重复成两个一模一样的标签；相同就只留徽章。 */
+  const sameName=(a:string,b:string)=>{const x=a.replace(/\s+/g,"").toLowerCase(),y=b.replace(/\s+/g,"").toLowerCase();return !!x&&!!y&&(x===y||x.includes(y)||y.includes(x));};
+  const authorShown = author && !(sourceName && sameName(author, sourceName)) ? author : "";
   const boxRef=useRef<HTMLDivElement>(null), videoRef=useRef<VideoHandle>(null);
   const lastWheel=useRef(0);
   const playKey=media ? `${media.sessionId}:${media.version}` : "pending", playUrl=media?.url;
@@ -806,7 +809,7 @@ export default function Feed({media, position, active=true, preparing=false, err
                   {onFavorite&&<button onClick={onFavorite} aria-label={favorite?"取消本地收藏":"本地收藏"} aria-pressed={favorite}><span>{favorite?<IHeartF size={25}/>:<IHeart size={25}/>}</span><small>{favorite?"已收藏":"收藏"}</small></button>}
                   <button aria-label="作品详情" onClick={showDetails}><span className="hg-info-glyph">ⓘ</span><small>详情</small></button>
                 </div>
-                <div className="hg-preview-copy"><h1>{title}</h1><div className="hg-preview-meta">{sourceName&&(onPickSources?<button type="button" className="hg-preview-badge" onClick={onPickSources} aria-label={`片源 ${sourceName}，点按选择在推荐流里显示的片源`}>{sourceName}</button>:<b className="hg-preview-badge">{sourceName}</b>)}<span>{author}</span>{score!==undefined&&<strong>评分 {score.toFixed(1)}</strong>}</div><button onClick={showDetails} className="hg-preview-synopsis"><span>{description || "发现下一部值得看的故事"}</span><b>展开</b></button></div>
+                <div className="hg-preview-copy"><h1>{title}</h1><div className="hg-preview-meta">{sourceName&&(onPickSources?<button type="button" className="hg-preview-badge" onClick={onPickSources} aria-label={`片源 ${sourceName}，点按选择在推荐流里显示的片源`}>{sourceName}</button>:<b className="hg-preview-badge">{sourceName}</b>)}{authorShown&&<span>{authorShown}</span>}{score!==undefined&&<strong>评分 {score.toFixed(1)}</strong>}</div><button onClick={showDetails} className="hg-preview-synopsis"><span>{description || "发现下一部值得看的故事"}</span><b>展开</b></button></div>
                 <div className="hg-preview-footer"><button className="hg-preview-watch" onClick={showDetails} aria-label={`观看完整作品${episodeCount ? `，共 ${episodeCount} 集` : ""}`}><IPlayF size={17}/>{episodeCount ? <em>{episodeCount}</em> : null}</button></div>
                 <div className="hg-preview-scrub">
                   <input aria-label="预览进度" type="range" min={0} max={duration||1} step=".1" disabled={!duration} value={Math.min(time,duration||1)} onChange={e=>{videoRef.current?.seek(Number(e.target.value));setTime(Number(e.target.value));}} style={{"--progress":`${barProgress*100}%`} as React.CSSProperties}/>

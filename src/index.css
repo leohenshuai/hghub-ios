@@ -795,11 +795,62 @@ html.theme-light .plat-ios .hpp-segmented button[aria-pressed=true] { background
 .plat-ios .hpp-plugins-page .plugin-kind-tabs button { border-radius: 999px; padding: 6px 12px; }
 
 /* —— 对话框 / 提示：玻璃 —— */
-.plat-ios .hpp-source-picker { border: 0; border-radius: 32px; background: var(--lg-fill-strong);
-  -webkit-backdrop-filter: blur(32px) saturate(190%); backdrop-filter: blur(32px) saturate(190%);
-  box-shadow: var(--lg-shadow), inset 0 1px 0 var(--lg-spec), inset 0 0 0 .5px var(--lg-edge); }
-.plat-ios .hpp-source-picker[open] { animation: kf-scale-in .4s var(--spring) both; }
+.plat-ios .hpp-source-picker { border: 0; background: var(--p-bg);
+  box-shadow: 0 -8px 40px rgba(0,0,0,.45), inset 0 .5px 0 var(--lg-edge); }
 .plat-ios .hpp-source-picker button { border-radius: 999px; padding: 10px 16px; }
+
+/* ===================================================================
+   片源选择：iPhone 13 Pro（390×844，安全区 47/34）适配
+   原来是居中的小对话框：32px 大圆角吃掉列表宽度，描述被截成半句，勾选框 16px 太小；
+   图二列表整列空白（弹窗上叠了 backdrop-filter，WKWebView 下内容不绘制）。
+   改成贴底抽屉：实色底、列表独占滚动区、整行可点、勾选框 24px、底栏避开 Home 条。
+   =================================================================== */
+.plat-ios .hpp-source-picker {
+  margin: auto 0 0; width: 100vw; max-width: 100vw; max-height: min(78dvh, 640px);
+  padding: 8px 16px calc(var(--sab, 0px) + 12px); border-radius: 28px 28px 0 0;
+  display: flex; flex-direction: column; overflow: hidden;
+  background: var(--p-bg); -webkit-backdrop-filter: none; backdrop-filter: none;
+}
+.plat-ios .hpp-source-picker::before {            /* 顶部抓手 */
+  content: ""; align-self: center; width: 36px; height: 5px; border-radius: 3px;
+  background: rgba(255,255,255,.28); margin: 2px 0 12px; flex: none;
+}
+.plat-ios .hpp-source-picker::backdrop { background: rgba(0,0,0,.5); -webkit-backdrop-filter: none; backdrop-filter: none; }
+.plat-ios .hpp-picker-heading { margin-bottom: 12px; flex: none; }
+.plat-ios .hpp-picker-heading h2 { font-size: 22px; letter-spacing: -.3px; }
+.plat-ios .hpp-picker-heading p { font-size: 12.5px; margin-top: 4px; }
+.plat-ios .hpp-picker-heading>button { width: 44px; height: 44px; margin: -6px -8px 0 0; padding: 0; display: grid; place-items: center; background: transparent; }
+.plat-ios .hpp-picker-heading>button svg { padding: 6px; box-sizing: content-box; border-radius: 50%; background: rgba(255,255,255,.1); }
+.plat-ios .hpp-source-picker .hpp-segmented { flex: none; margin-bottom: 8px; padding: 3px; }
+.plat-ios .hpp-source-picker .hpp-segmented button { padding: 0; min-height: 44px; font-size: 14px; }
+.plat-ios .hpp-picker-list {
+  flex: 1 1 auto; min-height: 0; max-height: none; margin: 0 -16px; padding: 0 16px;
+  overflow-y: auto; -webkit-overflow-scrolling: touch; overscroll-behavior: contain; gap: 0;
+}
+.plat-ios .hpp-picker-list label {
+  min-height: 60px; padding: 8px 0; gap: 12px; border-bottom: .5px solid rgba(255,255,255,.08);
+  -webkit-tap-highlight-color: rgba(255,255,255,.06);
+}
+.plat-ios .hpp-picker-list label:last-child { border-bottom: 0; }
+.plat-ios .hpp-picker-list .hpp-plugin-icon { width: 38px; height: 38px; border-radius: 10px; flex: none; }
+.plat-ios .hpp-picker-list strong { font-size: 16px; font-weight: 600; }
+.plat-ios .hpp-picker-list small {                  /* 描述允许两行，不再截成半句 */
+  font-size: 12px; line-height: 1.35; margin-top: 3px; white-space: normal;
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+}
+.plat-ios .hpp-picker-list input {                  /* 24px 勾选框，iOS 风格圆形 */
+  -webkit-appearance: none; appearance: none; flex: none; width: 24px; height: 24px; margin: 0;
+  border-radius: 50%; border: 1.5px solid rgba(255,255,255,.35); background: transparent;
+  display: grid; place-items: center; transition: background-color .15s, border-color .15s;
+}
+.plat-ios .hpp-picker-list input:checked { background: var(--p-primary); border-color: var(--p-primary); }
+.plat-ios .hpp-picker-list input:checked::after {
+  content: ""; width: 6px; height: 11px; margin-top: -2px; border: solid var(--p-on-primary, #fff); border-width: 0 2.2px 2.2px 0; transform: rotate(45deg);
+}
+.plat-ios .hpp-picker-list input:disabled { opacity: .55; }
+.plat-ios .hpp-source-picker footer { flex: none; padding-top: 12px; margin-top: 4px; gap: 10px; }
+.plat-ios .hpp-source-picker footer button { flex: 1; min-height: 48px; font-size: 16px; font-weight: 600; }
+.plat-ios .hpp-source-picker footer button.primary { flex: 1.4; }
 .plat-ios .hpp-home-errors { border: 0; border-radius: 18px; top: calc(var(--sat, 0px) + 56px); background: var(--lg-fill-strong);
   -webkit-backdrop-filter: blur(20px) saturate(180%); backdrop-filter: blur(20px) saturate(180%); }
 .plat-ios .a-toast { animation-timing-function: var(--spring); animation-duration: .42s; }
@@ -903,3 +954,42 @@ html.theme-light .plat-ios .hpp-segmented button[aria-pressed=true] { background
 .plat-ios .hg-preview-actions { bottom: calc(var(--tab-clear) + var(--scrub-h) + 64px) !important; gap: 14px; }
 .plat-ios .hg-preview-actions button>span { width: 46px; height: 46px; }
 .plat-ios .hg-preview-actions small { font-size: 11px; }
+
+/* ===================================================================
+   片源选择器（首页）：按 iPhone 13 Pro（390×844pt）重排。
+   原版沿用桌面样式：图标列被挤出左边缘、描述被截断后行高不齐、列表固定 320px 高，
+   且依赖多层 refined/plugins.css 的级联，渲染时偶发整列文字消失。
+   这里用独立类名（hg-sp-*）自成一套，不再吃外面的 .hpp-plugin-icon / label 规则。
+   =================================================================== */
+.hpp-source-picker.hg-sp {
+  width: min(calc(100vw - 24px), 420px); padding: 0; overflow: hidden;
+  max-height: calc(100dvh - var(--sat, 0px) - var(--sab, 0px) - 72px);
+}
+.hpp-source-picker.hg-sp[open] { display: flex; flex-direction: column; }
+.hg-sp-head { display: flex; align-items: flex-start; gap: 12px; padding: 20px 18px 6px 20px; }
+.hg-sp-head > div { flex: 1; min-width: 0; }
+.hg-sp-head h2 { font-size: 21px; font-weight: 750; letter-spacing: -.3px; margin: 0; }
+.hg-sp-head p { font-size: 12px; margin: 6px 0 0; opacity: .6; line-height: 1.45; }
+.hpp-source-picker .hg-sp-x { flex: none; width: 34px; height: 34px; padding: 0 !important; display: grid; place-items: center; border-radius: 50% !important; background: rgba(255,255,255,.1); }
+.hg-sp-seg { margin: 12px 18px 8px !important; flex: none; }
+.hg-sp-list { flex: 1 1 auto; min-height: 0; overflow-y: auto; -webkit-overflow-scrolling: touch; overscroll-behavior: contain; padding: 2px 10px 6px; display: block; max-height: none; margin: 0; }
+.hg-sp-row { display: flex; align-items: center; gap: 12px; min-height: 60px; padding: 8px 10px; border-radius: 16px; cursor: pointer; -webkit-tap-highlight-color: transparent; }
+.hg-sp-row:active { background: rgba(255,255,255,.07); }
+.hg-sp-row[data-on="true"] { background: rgba(255,255,255,.06); }
+.hg-sp-row[data-disabled="true"] { opacity: .75; }
+.hg-sp-ico { flex: none; width: 38px; height: 38px; border-radius: 11px; display: grid; place-items: center; font-style: normal; font-size: 17px; font-weight: 750; color: #fff; background: linear-gradient(145deg, #4c7ad8, #7a54c4); }
+.hg-sp-row:nth-child(4n+2) .hg-sp-ico { background: linear-gradient(145deg, #2fa79f, #2a7fc0); }
+.hg-sp-row:nth-child(4n+3) .hg-sp-ico { background: linear-gradient(145deg, #b5568c, #7a54c4); }
+.hg-sp-row:nth-child(4n) .hg-sp-ico { background: linear-gradient(145deg, #d8894c, #c4546a); }
+.hg-sp-txt { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+.hg-sp-txt strong { font-size: 15px; font-weight: 650; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.hg-sp-txt small { display: block; margin: 0; font-size: 11.5px; line-height: 1.3; opacity: .55; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.hg-sp-row input { flex: none; -webkit-appearance: none; appearance: none; width: 24px; height: 24px; margin: 0; border-radius: 50%; border: 1.5px solid rgba(255,255,255,.35); background: transparent; position: relative; transition: background-color .15s, border-color .15s; }
+.hg-sp-row input:checked { background: var(--p-primary, #0a84ff); border-color: var(--p-primary, #0a84ff); }
+.hg-sp-row input:checked::after { content: ""; position: absolute; left: 7px; top: 3.5px; width: 6px; height: 11px; border: solid #fff; border-width: 0 2.5px 2.5px 0; transform: rotate(45deg); }
+.hg-sp-row input:disabled { opacity: .7; }
+.hg-sp-foot { flex: none; display: flex; align-items: center; gap: 10px; padding: 12px 18px calc(14px + var(--sab, 0px) * 0); border-top: .5px solid rgba(255,255,255,.12); }
+.hg-sp-count { flex: 1; text-align: center; font-size: 12px; opacity: .6; white-space: nowrap; }
+.hpp-source-picker.hg-sp .hg-sp-foot button { min-height: 44px; padding: 0 18px !important; font-size: 15px; font-weight: 650; white-space: nowrap; }
+html.theme-light .hg-sp-x { background: rgba(0,0,0,.07); }
+html.theme-light .hg-sp-row input { border-color: rgba(0,0,0,.3); }

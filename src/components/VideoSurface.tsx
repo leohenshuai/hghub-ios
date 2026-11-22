@@ -49,7 +49,16 @@ export default forwardRef<VideoHandle, Props>(function VideoSurface(props, forwa
       if(attempt!==playAttempt.current || sessionId!==latest.current.media.sessionId || !latest.current.active || document.hidden)return;
       const name=(error as {name?:string})?.name;
       if(name==='AbortError')return; // Source changes and pause interrupt pending play promises.
-      if(name==='NotAllowedError'){wantsPlay.current=false;latest.current.onPause();}
+      if(name==='NotAllowedError'){
+        wantsPlay.current=false;latest.current.onPause();
+        // 自动播放被系统拒绝：记进诊断中心，才分得清是「低电量模式 / 非手势触发」还是代码问题。
+        const m=latest.current.media;
+        void pluginCommand("diagnostics.report",{plugin:m.providerId||"",level:"warn",message:`自动播放被系统拒绝(NotAllowedError)：muted=${v.muted} 页面可见=${!document.hidden} readyState=${v.readyState}`}).catch(()=>{});
+        // 兜底：用户在这页上的第一次触摸本身就是合法手势，借它把视频拉起来。
+        // 只在被拒之后才挂，且只触发一次，不改变正常路径。
+        const kick=()=>{window.removeEventListener("touchend",kick,true);window.removeEventListener("pointerup",kick,true);if(latest.current.active&&ref.current?.paused&&sessionId===latest.current.media.sessionId)play();};
+        window.addEventListener("touchend",kick,{capture:true,once:true});window.addEventListener("pointerup",kick,{capture:true,once:true});
+      }
       else latest.current.onError();
     });
   };
