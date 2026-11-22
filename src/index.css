@@ -848,46 +848,58 @@ html.theme-light .plat-ios .hpp-segmented button[aria-pressed=true] { background
 }
 
 /* ===================================================================
-   iOS 26 · 「观看完整作品」改为 Tab Bar 上方的迷你胶囊（参照 iOS 26 Music
-   的 tab bar accessory）：单行 54px、白色圆形播放钮、进度条贴胶囊底边。
-   标题与右侧操作钮按胶囊高度重新让位，不再互相压住。
+   iOS 26 · 预览流底部：胶囊缩成右下角小圆钮（只有播放三角 + 集数角标），
+   进度条独立成一条细线贴在 Tab Bar 上方，两者不再互相遮挡。
+   原来的整行胶囊宽度占满，进度条压在它内部底边又被 27px 圆角切掉两端。
    =================================================================== */
-.plat-ios { --tab-clear: calc(var(--sab, 0px) + 8px); --acc-h: 54px; }
+.plat-ios { --tab-clear: calc(var(--sab, 0px) + 8px); --acc-h: 54px; --scrub-h: 22px; }
+/* 小圆钮：右下角，不占整行，不挡进度条 */
 .plat-ios .hg-preview-footer {
-  left: 12px; right: 12px; inset-inline: 12px; bottom: var(--tab-clear) !important;
-  height: var(--acc-h); padding: 0 !important; border-radius: 27px; overflow: hidden;
-  display: flex; align-items: center; color: #fff;
+  left: auto !important; right: 14px; inset-inline: auto 14px;
+  bottom: calc(var(--tab-clear) + var(--scrub-h)) !important;
+  width: 54px; height: 54px; padding: 0 !important; border-radius: 50%; overflow: visible;
+  display: flex; align-items: center; justify-content: center;
   background: rgba(30, 30, 34, .5);
 }
 .plat-ios.has-tabbar .hg-preview-footer { padding: 0 !important; }
 .plat-ios .hg-preview-watch {
-  position: relative; height: var(--acc-h); min-height: 0; padding: 0 16px 0 58px; gap: 8px;
-  font-size: 14.5px; font-weight: 650; letter-spacing: -.1px; border-radius: 27px;
+  position: relative; width: 54px; height: 54px; min-height: 0; padding: 0; gap: 0;
+  border-radius: 50%; display: grid; place-items: center;
   transition: transform .35s var(--spring), background-color .2s;
 }
 .plat-ios .hg-preview-watch::before {
-  content: ""; position: absolute; left: 8px; top: 8px; width: 38px; height: 38px; border-radius: 50%;
+  content: ""; position: absolute; inset: 8px; border-radius: 50%;
   background: #fff; box-shadow: 0 2px 8px rgba(0,0,0,.25);
 }
-.plat-ios .hg-preview-watch > svg:first-child { position: absolute; left: 19px; top: 18.5px; color: #111; z-index: 1; }
-.plat-ios .hg-preview-watch > span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.plat-ios .hg-preview-watch > svg:last-child { color: rgba(255,255,255,.55); flex: none; }
-.plat-ios .hg-preview-watch:active { transform: scale(.97); background: rgba(255,255,255,.06); }
-/* 进度：细线贴底，拖动时才显示滑块 */
-.plat-ios .hg-preview-footer input {
-  position: absolute; left: 24px; right: 24px; bottom: 0; width: auto; height: 12px; margin: 0; z-index: 2;
+.plat-ios .hg-preview-watch > svg { position: relative; z-index: 1; color: #111; margin-left: 2px; }
+/* 集数角标 */
+.plat-ios .hg-preview-watch > em {
+  position: absolute; z-index: 2; right: -2px; top: -2px; min-width: 20px; height: 20px; padding: 0 5px;
+  border-radius: 10px; background: var(--p-accent, #0a84ff); color: #fff;
+  font-size: 11px; font-weight: 700; font-style: normal; line-height: 20px; text-align: center;
+  box-shadow: 0 1px 4px rgba(0,0,0,.35);
 }
-.plat-ios .hg-preview-footer input::-webkit-slider-runnable-track {
-  height: 2.5px; border-radius: 99px;
-  background: linear-gradient(to right, rgba(255,255,255,.9) var(--progress), rgba(255,255,255,.18) var(--progress));
+.plat-ios .hg-preview-watch:active { transform: scale(.92); }
+/* 进度：独立一条，贴 Tab Bar 上方，横贯屏宽，不被圆角裁切 */
+.plat-ios .hg-preview-scrub {
+  position: absolute; left: 14px; right: 14px; bottom: var(--tab-clear);
+  height: var(--scrub-h); display: flex; align-items: center; z-index: 3;
 }
-.plat-ios .hg-preview-footer input::-webkit-slider-thumb {
-  width: 10px; height: 10px; margin-top: -3.75px; opacity: 0; transition: opacity .2s; box-shadow: 0 1px 4px rgba(0,0,0,.4);
+.plat-ios .hg-preview-scrub input {
+  width: 100%; height: var(--scrub-h); margin: 0; background: none; -webkit-appearance: none; appearance: none;
 }
-.plat-ios .hg-preview-footer input:active::-webkit-slider-thumb { opacity: 1; }
-.plat-ios .hg-preview-footer input:disabled { opacity: .35; }
-/* 让位：标题区与右侧操作钮都落在胶囊之上 14px */
-.plat-ios .hg-preview-copy { bottom: calc(var(--tab-clear) + var(--acc-h) + 14px) !important; right: 84px; }
-.plat-ios .hg-preview-actions { bottom: calc(var(--tab-clear) + var(--acc-h) + 14px) !important; gap: 14px; }
+.plat-ios .hg-preview-scrub input::-webkit-slider-runnable-track {
+  height: 3px; border-radius: 99px;
+  background: linear-gradient(to right, rgba(255,255,255,.92) var(--progress), rgba(255,255,255,.22) var(--progress));
+}
+.plat-ios .hg-preview-scrub input::-webkit-slider-thumb {
+  -webkit-appearance: none; appearance: none; width: 11px; height: 11px; border-radius: 50%; background: #fff;
+  margin-top: -4px; opacity: 0; transition: opacity .2s; box-shadow: 0 1px 4px rgba(0,0,0,.4);
+}
+.plat-ios .hg-preview-scrub input:active::-webkit-slider-thumb { opacity: 1; }
+.plat-ios .hg-preview-scrub input:disabled { opacity: .35; }
+/* 让位：标题区与右侧操作钮落在小圆钮之上 */
+.plat-ios .hg-preview-copy { bottom: calc(var(--tab-clear) + var(--scrub-h) + 64px) !important; right: 84px; }
+.plat-ios .hg-preview-actions { bottom: calc(var(--tab-clear) + var(--scrub-h) + 64px) !important; gap: 14px; }
 .plat-ios .hg-preview-actions button>span { width: 46px; height: 46px; }
 .plat-ios .hg-preview-actions small { font-size: 11px; }
