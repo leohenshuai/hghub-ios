@@ -39,9 +39,9 @@ jobs:
           node -e "const fs=require('fs');for(const p of ['src-tauri/tauri.conf.json','package.json']){const j=JSON.parse(fs.readFileSync(p));j.version=process.argv[1];fs.writeFileSync(p,JSON.stringify(j,null,2)+'\n')}" "$V"
           node -e "const fs=require('fs');const p='src-tauri/Cargo.toml';const s=fs.readFileSync(p,'utf8');fs.writeFileSync(p,s.replace(/^version = \".*\"$/m,'version = \"'+process.argv[1]+'\"'))" "$V"
 
+      # pnpm 版本由 package.json 的 packageManager 字段统一指定，
+      # 这里不能再写 version，否则 action-setup 会因两个版本来源报错。
       - uses: pnpm/action-setup@v4
-        with:
-          version: 10
 
       - uses: actions/setup-node@v4
         with:
