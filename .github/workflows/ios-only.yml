@@ -75,7 +75,12 @@ jobs:
             done
             /usr/libexec/PlistBuddy -c "Delete :NSAppTransportSecurity" "$plist" 2>/dev/null || true
             /usr/libexec/PlistBuddy -c "Add :NSAppTransportSecurity dict" "$plist"
-            /usr/libexec/PlistBuddy -c "Add :NSAppTransportSecurity:NSAllowsArbitraryLoads bool true" "$plist"
+            # ATS 只放开 WebView 内容与媒体两项，不再全开 NSAllowsArbitraryLoads：
+            # 播放走 WKWebView，远程内容经本地代理（hg:/127.0.0.1/hg.localhost）进入，
+            # CSP 也未放行任何远程 http 主机；插件的远程抓取走 Rust reqwest，不经
+            # Apple URL Loading System，不受 ATS 管辖。无原生 AVPlayer 直连远程流。
+            /usr/libexec/PlistBuddy -c "Add :NSAppTransportSecurity:NSAllowsArbitraryLoadsInWebContent bool true" "$plist"
+            /usr/libexec/PlistBuddy -c "Add :NSAppTransportSecurity:NSAllowsArbitraryLoadsForMedia bool true" "$plist"
           done
         env:
           APPLE_DEVELOPMENT_TEAM: ${{ steps.team.outputs.team }}
