@@ -3,29 +3,41 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        default: "0.0.4"
+        description: "版本号（留空则用 package.json 的 version，它是唯一源头）"
+        required: false
+        default: ""
 permissions:
-  contents: read
+  contents: write
 env:
   CI: "true"
-  GITHUB_REF_NAME: v${{ inputs.version }}
-  APP_REF: v${{ inputs.version }}
 jobs:
   ios:
     name: iOS Build (IPA)
     runs-on: macos-15
-    env:
-      APPLE_DEVELOPMENT_TEAM: "ABCDE12345"
     steps:
       - uses: actions/checkout@v4
 
+      # Team ID 只维护在 tauri.conf.json 的 bundle.iOS.developmentTeam，workflow 从那里读
+      - name: 读取 Team ID
+        id: team
+        shell: bash
+        run: echo "team=$(node -p "require('./src-tauri/tauri.conf.json').bundle.iOS.developmentTeam")" >> "$GITHUB_OUTPUT"
+
+      # 版本号唯一源头是 package.json；填写了 input 才覆盖，并同步到所有位置
       - name: 对齐版本号
         id: ver
         shell: bash
         run: |
-          V="${APP_REF#v}"
+          V="${{ inputs.version }}"
+          V="${V#v}"
+          if [ -z "$V" ]; then
+            V=$(node -p "require('./package.json').version")
+          fi
           echo "version=$V" >> "$GITHUB_OUTPUT"
+          echo "GITHUB_REF_NAME=v$V" >> "$GITHUB_ENV"
+          echo "APP_REF=v$V" >> "$GITHUB_ENV"
           node -e "const fs=require('fs');for(const p of ['src-tauri/tauri.conf.json','package.json']){const j=JSON.parse(fs.readFileSync(p));j.version=process.argv[1];fs.writeFileSync(p,JSON.stringify(j,null,2)+'\n')}" "$V"
+          node -e "const fs=require('fs');const p='src-tauri/Cargo.toml';const s=fs.readFileSync(p,'utf8');fs.writeFileSync(p,s.replace(/^version = \".*\"$/m,'version = \"'+process.argv[1]+'\"'))" "$V"
 
       - uses: pnpm/action-setup@v4
         with:
@@ -66,12 +78,13 @@ jobs:
             /usr/libexec/PlistBuddy -c "Add :NSAppTransportSecurity:NSAllowsArbitraryLoads bool true" "$plist"
           done
         env:
-          APPLE_DEVELOPMENT_TEAM: "ABCDE12345"
+          APPLE_DEVELOPMENT_TEAM: ${{ steps.team.outputs.team }}
 
       - name: 构建 iOS 应用与打包 IPA
         shell: bash
         env:
           APP_VERSION: ${{ steps.ver.outputs.version }}
+          APPLE_DEVELOPMENT_TEAM: ${{ steps.team.outputs.team }}
         run: bash scripts/build-ios-unsigned.sh "$APP_VERSION"
 
       - name: 上传 IPA 产物
@@ -80,4 +93,18 @@ jobs:
           name: ios
           path: artifacts/*
           if-no-files-found: error
+
+      - name: 发布 IPA 到 GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          TAG="ios-v${{ steps.ver.outputs.version }}"
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release upload "$TAG" artifacts/* --clobber
+          else
+            gh release create "$TAG" artifacts/* \
+              --title "HGhub iOS ${{ steps.ver.outputs.version }} (unsigned)" \
+              --notes "Unsigned IPA built by the iOS Unsigned workflow. Re-sign with TrollStore / AltStore / Sideloadly before installing."
+          fi
 

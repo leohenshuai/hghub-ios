@@ -11,7 +11,7 @@ const { version } = JSON.parse(
 export default defineConfig({
   plugins: [react(), tailwindcss()],
   clearScreen: false,
-  // 版本号只维护 package.json（CI 会按 tag 改写它），界面里的版本由这里注入，避免写死后漂移
+  // 版本号只维护 package.json（iOS workflow 以它为准，并同步到 tauri.conf.json 与 src-tauri/Cargo.toml），界面里的版本由这里注入，避免写死后漂移
   define: {
     __APP_VERSION__: JSON.stringify(version),
   },

@@ -20,6 +20,8 @@ trap cleanup EXIT
 for ((attempt = 0; attempt < 180; attempt++)); do
   if ! kill -0 "$SESSION_PID" 2>/dev/null; then
     echo 'Tauri build session exited before becoming ready' >&2
+    echo "Session log: $LOG (addr file: $ADDR_FILE)" >&2
+    tail -n 50 "$LOG" >&2 || true
     exit 1
   fi
   if [[ -s "$ADDR_FILE" ]]; then
@@ -29,6 +31,10 @@ for ((attempt = 0; attempt < 180; attempt++)); do
 done
 if [[ ! -s "$ADDR_FILE" ]]; then
   echo 'Timed out waiting for the Tauri build options server' >&2
+  echo "Waited 180s for addr file: $ADDR_FILE" >&2
+  echo "Session state: pid=$SESSION_PID alive=$(kill -0 "$SESSION_PID" 2>/dev/null && echo yes || echo no)" >&2
+  echo "Session log: $LOG" >&2
+  tail -n 50 "$LOG" >&2 || true
   exit 1
 fi
 
