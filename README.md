@@ -11,12 +11,24 @@
   <a href="https://minireel.github.io/HGhub/">在线文档</a> ·
   <a href="docs/developers/index.md">插件开发</a> ·
   <a href="docs/DEVELOPMENT.md">参与开发</a> ·
-  <a href="https://github.com/Minireel/HGhub/issues">反馈问题</a>
+  <a href="https://github.com/leohenshuai/hghub-ios/issues">反馈问题</a>
 </p>
 
 HGhub 将浏览、搜索、播放和个人片库放在同一个应用中。通过导入 JavaScript 插件，你可以接入不同内容来源，并使用统一的界面观看与管理内容。
 
 **应用不内置内容源，不分发第三方插件，也不提供官方源列表。** 首次使用需自行导入插件，无需注册 HGhub 账号；来源要求登录时，由对应插件提供登录入口。
+
+## 关于本仓库（iOS fork）
+
+本仓库是 [HGhub 上游项目（Minireel/HGhub）](https://github.com/Minireel/HGhub) 的 iOS 适配 fork。与上游的区别只有一个：通过 GitHub Actions 构建**未签名 IPA** 并发布到本仓的 [Releases](https://github.com/leohenshuai/hghub-ios/releases)，供 iOS 设备侧载安装。播放器、插件协议与功能与上游一致，应用内更新检查也只指向本仓的 Release。
+
+### iOS 侧载安装
+
+1. 从本仓 [Releases](https://github.com/leohenshuai/hghub-ios/releases) 下载最新的 IPA 文件。
+2. IPA 未签名，需重签后安装，任选其一：
+   - **TrollStore**：直接导入 IPA 安装。
+   - **AltStore / Sideloadly**：用自己的 Apple ID 重签后安装。
+3. 打开应用后，按下方“开始使用”导入插件即可。
 
 ## 核心体验
 
@@ -55,7 +67,7 @@ HGhub 维护播放器与插件接口，第三方内容的可用性由相应来�
 
 ## 参与、交流、贡献
 
-欢迎通过 [Issues](https://github.com/Minireel/HGhub/issues) 反馈问题、提出想法，或提交 [Pull Request](https://github.com/Minireel/HGhub/pulls) 参与改进。报告问题时，请附上应用版本、操作系统和复现步骤。
+欢迎通过 [Issues](https://github.com/leohenshuai/hghub-ios/issues) 反馈问题、提出想法，或提交 [Pull Request](https://github.com/leohenshuai/hghub-ios/pulls) 参与改进。报告问题时，请附上应用版本、操作系统和复现步骤。
 
 项目本身由我独立维护，维护者会根据时间与精力处理反馈，不承诺第三方插件或站点持续可用。维护范围与权益反馈方式见[项目声明](docs/PROJECT_POLICY.md)。
 

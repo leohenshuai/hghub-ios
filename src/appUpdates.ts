@@ -1,5 +1,8 @@
-const RELEASE_API = "https://api.github.com/repos/Minireel/HGhub/releases/latest";
-const RELEASE_PREFIX = "https://github.com/Minireel/HGhub/releases/tag/";
+// 本仓库是 HGhub 的 iOS 适配 fork（leohenshuai/hghub-ios），更新检查只看本仓的
+// Release，不再指向上游 Minireel/HGhub。本仓 Release 由 iOS workflow 以
+// v<version> 打 tag（version 源头为 package.json），与下方 SemVer 比较逻辑一致。
+const RELEASE_API = "https://api.github.com/repos/leohenshuai/hghub-ios/releases/latest";
+const RELEASE_PREFIX = "https://github.com/leohenshuai/hghub-ios/releases/tag/";
 
 export type AppRelease = { tag: string; url: string; available: boolean };
 

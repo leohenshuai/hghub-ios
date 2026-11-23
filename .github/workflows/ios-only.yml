@@ -99,7 +99,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         shell: bash
         run: |
-          TAG="ios-v${{ steps.ver.outputs.version }}"
+          TAG="v${{ steps.ver.outputs.version }}"
           if gh release view "$TAG" >/dev/null 2>&1; then
             gh release upload "$TAG" artifacts/* --clobber
           else

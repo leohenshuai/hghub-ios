@@ -2,6 +2,8 @@
 
 本页记录 `main` 分支对 HPP `1.0.0-dev` 的支持情况。2026-11-18 已更新 Windows 与 Android 的网页登录验收结果。
 
+iOS 验证边界：本 fork 的 iOS 构建（未签名 IPA）未纳入本页的验证范围，尚无真机验收记录。下表 Windows 与 Android 的验证结果只能作参照，不视为 iOS 已验收。
+
 | 范围 | 当前状态 | 验证边界 |
 | --- | --- | --- |
 | 单文件/列表/URL 导入 | 已实现 | Rust 与 Windows UI；Android 单文件实测 |

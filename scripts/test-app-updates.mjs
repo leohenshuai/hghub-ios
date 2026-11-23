@@ -19,11 +19,11 @@ for (const value of ['latest', 'v1.2', '1.02.3', '1.2.3-01', '1.2.3\n', '1.2.3/f
   assert.throws(() => compareVersions(value, '0.0.1'), /版本号/);
 }
 const controller = new AbortController();
-const release = (tag = 'v0.0.2') => ({ tag_name: tag, html_url: `https://github.com/Minireel/HGhub/releases/tag/${tag}`, draft: false, prerelease: false });
+const release = (tag = 'v0.0.2') => ({ tag_name: tag, html_url: `https://github.com/leohenshuai/hghub-ios/releases/tag/${tag}`, draft: false, prerelease: false });
 function respond(body, status = 200, headers = {}) {
   globalThis.fetch = async (url, options) => {
     calls++;
-    assert.equal(url, 'https://api.github.com/repos/Minireel/HGhub/releases/latest');
+    assert.equal(url, 'https://api.github.com/repos/leohenshuai/hghub-ios/releases/latest');
     assert.equal(options.credentials, 'omit');
     assert.equal(options.cache, 'no-store');
     assert.equal(options.signal, controller.signal);
