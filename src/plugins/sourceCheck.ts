@@ -26,7 +26,7 @@ type Item = { id: string; title?: string };
 type Page = { items?: Item[] };
 type Cat = { id: string; label?: string; title?: string; children?: Cat[] };
 type Detail = { id?: string; title?: string; playlists?: { id: string; episodes?: { id: string }[] }[] };
-type Playback = { streams?: { url: string; format?: string; kind?: string; headers?: Record<string, string> }[] };
+type Playback = { streams?: { url: string; format?: string; kind?: string; headers?: Record<string, string>; transforms?: Record<string, { type?: string; name?: string } | null> }[] };
 
 /**
  * 在 App 里体检一个源：分类 → 列表 → 详情 → 解析播放 → 真实请求视频流首个分片。
@@ -77,8 +77,11 @@ export async function checkPlugin(p: InstalledPlugin, signal?: AbortSignal): Pro
           else if (s.kind === "external" || s.kind === "page") add("播放地址", true, "网盘/外部链接（需手动打开）");
           else {
             add("播放地址", true, s.format || "");
-            // 真实拉一次：解析成功不代表能播，这一步才对应实际观看
-            const probe = await probeStream(id, s.url, s.headers, s.format);
+            // 真实拉一次：解析成功不代表能播，这一步才对应实际观看。
+            // 但带 plugin 资源变换的流（如 Rou 把清单/分片包在 PNG 里）原始内容必然不是清单，
+            // 变换只在媒体代理里发生，探针绕过代理直拉时不能按原始内容判失败，只看可达性。
+            const hasTransform = !!(s.transforms && Object.values(s.transforms).some(t => t && t.type === "plugin"));
+            const probe = await probeStream(id, s.url, s.headers, s.format, hasTransform);
             add("视频流", probe.ok, probe.detail);
           }
         }
@@ -94,14 +97,15 @@ export async function checkPlugin(p: InstalledPlugin, signal?: AbortSignal): Pro
   return r;
 }
 
-/** 走宿主的媒体代理之外，直接按插件给的请求头拉一次：HLS 读清单，普通视频读开头几十 KB */
-async function probeStream(id: string, url: string, headers: Record<string, string> | undefined, format: string | undefined) {
+/** 走宿主的媒体代理之外，直接按插件给的请求头拉一次：HLS 读清单，普通视频读开头几十 KB。
+ *  hasTransform 的流原始内容是变换前的包装格式（如 PNG 包着的清单），不按内容判失败。 */
+async function probeStream(id: string, url: string, headers: Record<string, string> | undefined, format: string | undefined, hasTransform = false) {
   try {
     const res = await pluginCommand<{ status: number; contentType?: string; bodyHead?: string; ok: boolean }>(
       "diagnostics.probe", { id, url, headers: headers || {}, hls: format === "hls" });
     if (!res.ok) return { ok: false, detail: `HTTP ${res.status || 0}${res.contentType ? " " + res.contentType : ""}` };
-    if (format === "hls" && res.bodyHead && !res.bodyHead.startsWith("#EXTM3U")) return { ok: false, detail: `返回的不是清单（${res.contentType || "?"}）` };
-    return { ok: true, detail: `${res.status} ${res.contentType || ""}`.trim() };
+    if (format === "hls" && !hasTransform && res.bodyHead && !res.bodyHead.startsWith("#EXTM3U")) return { ok: false, detail: `返回的不是清单（${res.contentType || "?"}）` };
+    return { ok: true, detail: `${res.status} ${res.contentType || ""}${hasTransform ? "（经插件变换解包）" : ""}`.trim() };
   } catch (e) {
     return { ok: false, detail: short(e) };
   }
