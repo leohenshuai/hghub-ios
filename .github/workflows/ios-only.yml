@@ -36,8 +36,9 @@ jobs:
           node-version: 22
           cache: pnpm
 
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: dtolnay/rust-toolchain@master
         with:
+          toolchain: "1.90"
           targets: aarch64-apple-ios,aarch64-apple-ios-sim
 
       - uses: swatinem/rust-cache@v2

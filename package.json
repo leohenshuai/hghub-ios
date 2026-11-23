@@ -3,6 +3,7 @@
   "private": true,
   "version": "0.0.4",
   "license": "PolyForm-Noncommercial-1.0.0",
+  "packageManager": "pnpm@10.34.9",
   "type": "module",
   "scripts": {
     "dev": "vite",
